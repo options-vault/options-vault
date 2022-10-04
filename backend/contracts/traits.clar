@@ -1,15 +1,16 @@
 
-;; traits
-;; <add a description here>
+(define-trait sip009-nft-trait
+	(
+		;; Last token ID, limited to uint range
+		(get-last-token-id () (response uint uint))
 
-;; constants
-;;
+		;; URI for metadata associated with the token 
+		(get-token-uri (uint) (response (optional (string-ascii 256)) uint))
 
-;; data maps and vars
-;;
+		;; Owner of a given token identifier
+		(get-owner (uint) (response (optional principal) uint))
 
-;; private functions
-;;
-
-;; public functions
-;;
+		;; Transfer from the sender to a new principal
+		(transfer (uint principal principal) (response bool uint))
+	)
+)
