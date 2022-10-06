@@ -14,6 +14,9 @@ path = "contracts/auction.clar"
 [contracts.options-nft]
 path = "contracts/options-nft.clar"
 
+[contracts.redstone-verify]
+path = "contracts/redstone-verify.clar"
+
 [contracts.settlement]
 path = "contracts/settlement.clar"
 
