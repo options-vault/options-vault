@@ -3,16 +3,16 @@
 ;; SIP009 NFT trait on mainnet
 ;; (impl-trait 'SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.nft-trait.nft-trait)
 
-;; define nft and identifier type
 (define-non-fungible-token options-nft uint)
 
-;; tx-sender is a built in keyword that always refers to whoever sent the transaction
 (define-constant contract-owner tx-sender)
 (define-constant err-owner-only (err u100))
 (define-constant err-not-token-owner (err u101))
+(define-constant err-no-info-for-expiry (err u102))
+
+(define-map options-info uint uint)
 (define-data-var last-token-id uint u0)
 
-;; return a response with the id of the last minted token
 (define-public (get-last-token-id)
   (ok (var-get last-token-id))
 )
@@ -25,7 +25,10 @@
 	(ok none)
 )
 
-;; begin used to add more than one expression
+(define-read-only (get-options-info (expiry uint)) 
+	(ok (unwrap! (map-get? options-info expiry) err-no-info-for-expiry))
+)
+
 (define-public (transfer (token-id uint) (sender principal) (recipient principal))
 	(begin
 		(asserts! (is-eq tx-sender sender) err-not-token-owner)
@@ -33,11 +36,9 @@
 	)
 )
 
-;; mint a token
 (define-public (mint (recipient principal))
 	(let
 		(
-      ;; increment token id by 1
 			(token-id (+ (var-get last-token-id) u1))
 		)
     ;; only contract owner can mint (for testing)
@@ -47,3 +48,9 @@
 		(ok token-id)
 	)
 )
+
+;; TO DO: map-set options-info with the expiry and strike price
+
+;; TO DO: verify that provided token-id corresponds to provided expiry date
+;; + add token-id-range into tuple in options-info (delinating the start and end token-id for the expiry)
+;; + add err code for token-id not in range (err-token-id-not-in-expiry-range)
