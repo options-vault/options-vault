@@ -42,7 +42,6 @@
     ;; verify that stxusd-rate is signed by redstine oracle
     ;; retrieve and store value of nft at expiry --> call determine-value passing expiry
     ;; if value positive: transfer stx to tx-sender
-    
     (ok true)
   )
   ;; TO ADD: When first called for an expiry AND expiry in the past AND in-the-money, creaet pool of money for payouts (set aside)
