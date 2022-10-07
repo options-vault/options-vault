@@ -36,6 +36,7 @@
 	)
 )
 
+;; TO DO: needs to be private and can only be called by auction contract
 (define-public (mint (recipient principal))
 	(let
 		(
