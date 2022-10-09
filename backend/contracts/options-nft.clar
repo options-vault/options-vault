@@ -10,7 +10,13 @@
 (define-constant err-not-token-owner (err u101))
 (define-constant err-no-info-for-expiry (err u102))
 
-(define-map options-info uint uint)
+(define-map options-info { expiry: uint } 
+{ 
+	strike: uint, 
+	first-token-id: uint, 
+	last-token-id: uint 
+})
+
 (define-data-var last-token-id uint u0)
 
 (define-public (get-last-token-id)
