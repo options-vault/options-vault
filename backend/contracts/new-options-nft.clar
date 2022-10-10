@@ -8,9 +8,10 @@
 (define-constant err-stale-rate (err u102))
 (define-constant err-no-known-price (err u103))
 (define-constant err-not-token-owner (err u104))
-(define-constant err_option_not_expired (err u105))
+(define-constant err-option-not-expired (err u105))
 (define-constant err-no-info-for-expiry (err u106))
 (define-constant err-initialization-start (err u107))
+(define-constant err-no-active-auction (err u108))
 
 (define-constant symbol-stxusd 0x535458555344) ;; "STXUSD" as a buff
 (define-constant redstone-value-shift u100000000)
@@ -36,6 +37,8 @@
 (define-data-var price-in-usd (optional uint) none) 
 
 (define-data-var current-cycle-expiry uint u1665763200) ;; set to Fri Oct 14 2022 16:00:00 GMT+0000
+(define-data-var auction-start-block-height uint u0)
+(define-data-var auction-decrement-value uint u0)
 (define-constant week-in-seconds u604800)
 (define-constant min-in-seconds u60)
 
@@ -47,7 +50,7 @@
 		(
 			;; Recover the pubkey of the signer.
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
-			(start-init-window (- (var-get current-cycle-expiry) (* u270 min-in-seconds)))
+			(start-init-window (- (var-get current-cycle-expiry) (* u250 min-in-seconds)))
 			(end-init-window (- (var-get current-cycle-expiry) (* u240 min-in-seconds)))
 		)
 		;; Check if the signer is a trusted oracle.
@@ -55,22 +58,19 @@
 		;; Check if the data is not stale, depending on how the app is designed.
 		(asserts! (> timestamp (get-last-block-timestamp)) err-stale-rate) ;; timestamp should be larger than the last block timestamp.
 		(asserts! (>= timestamp (var-get last-seen-timestamp)) err-stale-rate) ;; timestamp should be larger than or equal to the last seen timestamp.
-		
+		;; Save last seen stxusd price
 		(var-set last-stxusd-rate (some stxusd-rate))
 		;; Save last seen timestamp.
-		(var-set last-seen-timestamp timestamp)
-
-		;; check if timestamp > start and timestamp < end of initialization time range
-		
-
+		(var-set last-seen-timestamp timestamp)		;; check if timestamp > start and timestamp < end of initialization time range
 		(if (and (> timestamp start-init-window) (< timestamp end-init-window))
 		 (unwrap! (initialize-next-cycle) err-initialization-start)
 		 (unwrap! (no-init) err-initialization-start)
 		)
-
 		(ok true)
 	)
 )
+
+;; INITIALIZE NEXT CYCLE
 
 (define-private (initialize-next-cycle) 
 	(let 
@@ -82,6 +82,8 @@
 		)
 		(map-set options-info { expiry-timestamp: expiry-next-cycle } {strike: strike, first-token-id: first-token-id, last-token-id: first-token-id})
 		(set-options-price stxusd-rate)
+		(var-set auction-start-block-height block-height)
+		(var-set auction-decrement-value (/ (* (unwrap-panic (var-get price-in-usd)) u25) u1000))
 		(ok true) 
 	)
 )
@@ -97,6 +99,81 @@
 	(var-set price-in-usd (some (/ stxusd-rate u5000)))
 )
 
+;; NFT MINTING (Priced in USD, payed in STX)
+
+;; TO DO: map-set options-info with the expiry and strike price
+
+;; #[allow(unchecked_data)]
+(define-public (mint (timestamp uint) (stxusd-rate uint) (signature (buff 65)))
+	(let
+		(
+			;; Recover the pubkey of the signer.
+			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
+			(token-id (+ (var-get token-id-nonce) u1))
+		)
+		;; Check if the signer is a trusted oracle. If it fails, then the possible price
+		;; update via get-update-latest-price-in-stx is also reverted. This is important.
+		(asserts! (is-trusted-oracle signer) err-untrusted-oracle)
+		;; Check if mint function is being called in the auction window of start + 25 blocks
+		(asserts! (and
+			(>= block-height (var-get auction-start-block-height))
+			(< block-height (+ (var-get auction-start-block-height) u25))) 
+			err-no-active-auction
+		)
+		;; Update the mint price based on where in the 25 block minting window we are 
+		(update-price-in-usd)
+		;; Update the token ID nonce.
+		(var-set token-id-nonce token-id)
+		;; Send the STX equivalent to the contract owner. TO DO: send STX to vault contract instead of contract-owner
+		(try! (stx-transfer? (try! (get-update-latest-price-in-stx timestamp stxusd-rate)) tx-sender (var-get contract-owner)))
+		;; Mint the NFT.
+		(try! (nft-mint? options-nft token-id tx-sender))
+		(ok token-id)
+	)
+)
+
+(define-private (update-price-in-usd) 
+	(let
+		(
+			(decrement (* (mod block-height (var-get auction-start-block-height)) (var-get auction-decrement-value)))
+		)
+		(var-set price-in-usd (some (- (unwrap-panic (var-get price-in-usd)) decrement)))
+	)
+)
+
+;; SETTLEMENT
+
+;; TO DO: verify that provided token-id corresponds to provided expiry date
+;; + add err code for token-id not in range (err-token-id-not-in-expiry-range)
+
+;; settles option-nfts
+;; #[allow(unchecked_data)] 
+(define-public (settle (token-id uint) (timestamp uint) (stxusd-rate uint) (signature (buff 65))) 
+  (let
+    (
+      ;; Recover the pubkey of the signer
+      (signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
+      ;; retrieve and store strike price for expiry
+      (strike (get strike (try! (get-options-info (var-get current-cycle-expiry))))) 
+    ) 
+		;; Check if the signer is a trusted oracle
+    (asserts! (is-trusted-oracle signer) err-untrusted-oracle)
+
+    ;; transfer options NFT to settlement contract
+    (try! (transfer token-id tx-sender (as-contract tx-sender)))
+    ;; TO DO: 
+    ;; check if expiry is in the past -->  if not: ERR_OPTION_NOT_EXPIRED
+    ;; verify that stxusd-rate is signed by redstine oracle
+    ;; retrieve and store value of nft at expiry --> call determine-value passing expiry
+    ;; if value positive: transfer stx to tx-sender
+    (ok true)
+  )
+  ;; TO ADD: When first called for an expiry AND expiry in the past AND in-the-money, creaet pool of money for payouts (set aside)
+)
+
+(define-private (determine-value (expiry-timestamp uint)) 
+  (ok true)
+)
 
 ;; NFT HELPER FUNCTOINS
 
@@ -120,35 +197,42 @@
 	)
 )
 
-;; MINT NFT PRICED IN USD WITH STX TRANSFER
-;; TO DO: map-set options-info with the expiry and strike price
+(define-private (get-options-info (expiry-timestamp uint)) 
+  (ok (unwrap! (map-get? options-info {expiry-timestamp: expiry-timestamp}) err-no-info-for-expiry))
+)
 
+;; CONTRACT OWNERSHIP HELPER FUNCTIONS
 
-;; #[allow(unchecked_data)]
-(define-public (mint (timestamp uint) (stxusd-rate uint) (signature (buff 65)))
-	(let
-		(
-			;; Recover the pubkey of the signer.
-			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
-			;; Get the latest price using the rate.
-			(price (try! (get-update-latest-price-in-stx timestamp stxusd-rate)))
-			(token-id (+ (var-get token-id-nonce) u1))
-		)
-		;; Check if the signer is a trusted oracle. If it fails, then the possible price
-		;; update via get-update-latest-price-in-stx is also reverted. This is important.
-		(asserts! (is-trusted-oracle signer) err-untrusted-oracle)
-
-		;; Update the token ID nonce.
-		(var-set token-id-nonce token-id)
-
-		;; Send the STX equivalent to the contract owner.
-		(try! (stx-transfer? price tx-sender (var-get contract-owner)))
-
-		;; Mint the NFT.
-		(try! (nft-mint? options-nft token-id tx-sender))
-		(ok token-id)
+(define-public (set-contract-owner (new-owner principal))
+	(begin
+		(asserts! (is-eq (var-get contract-owner) tx-sender) err-not-contract-owner)
+		(ok (var-set contract-owner tx-sender))
 	)
 )
+
+(define-public (get-contract-owner)
+	(ok (var-get contract-owner))
+)
+
+;; ORACLE DATA VERIFICATION HELPER FUNCTIONS
+
+(define-private (get-last-block-timestamp)
+	(default-to u0 (get-block-info? time (- block-height u1)))
+)
+
+(define-read-only (is-trusted-oracle (pubkey (buff 33)))
+	(default-to false (map-get? trusted-oracles pubkey))
+)
+
+;; #[allow(unchecked_data)]
+(define-public (set-trusted-oracle (pubkey (buff 33)) (trusted bool))
+	(begin
+		(asserts! (is-eq (var-get contract-owner) tx-sender) err-not-contract-owner)
+		(ok (map-set trusted-oracles pubkey trusted))
+	)
+)
+
+;; PRICING HELPER FUNCTIONS
 
 (define-private (get-update-latest-price-in-stx (timestamp uint) (current-stxusd-rate uint))
 	(let
@@ -184,67 +268,4 @@
 		stxusd-rate (ok (usd-to-stx (get-usd-price) stxusd-rate))
 		err-no-known-price
 	)
-)
-
-(define-private (get-last-block-timestamp)
-	(default-to u0 (get-block-info? time (- block-height u1)))
-)
-
-(define-read-only (is-trusted-oracle (pubkey (buff 33)))
-	(default-to false (map-get? trusted-oracles pubkey))
-)
-
-;; #[allow(unchecked_data)]
-(define-public (set-trusted-oracle (pubkey (buff 33)) (trusted bool))
-	(begin
-		(asserts! (is-eq (var-get contract-owner) tx-sender) err-not-contract-owner)
-		(ok (map-set trusted-oracles pubkey trusted))
-	)
-)
-
-(define-public (set-contract-owner (new-owner principal))
-	(begin
-		(asserts! (is-eq (var-get contract-owner) tx-sender) err-not-contract-owner)
-		(ok (var-set contract-owner tx-sender))
-	)
-)
-
-(define-public (get-contract-owner)
-	(ok (var-get contract-owner))
-)
-
-;; TO DO: verify that provided token-id corresponds to provided expiry date
-;; + add err code for token-id not in range (err-token-id-not-in-expiry-range)
-
-;; settles option-nfts
-;; #[allow(unchecked_data)] 
-(define-public (settle (expiry-timestamp uint) (token-id uint) (timestamp uint) (stxusd-rate uint) (signature (buff 65))) 
-  (let
-    (
-      ;; Recover the pubkey of the signer
-      (signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
-      ;; retrieve and store strike price for expiry
-      (strike (get strike (try! (get-options-info expiry-timestamp))))  
-    ) 
-		;; Check if the signer is a trusted oracle
-    (asserts! (is-trusted-oracle signer) err-untrusted-oracle)
-
-    ;; transfer options NFT to settlement contract
-    (try! (transfer token-id tx-sender (as-contract tx-sender)))
-    ;; TO DO: 
-    ;; check if expiry is in the past -->  if not: ERR_OPTION_NOT_EXPIRED
-    ;; verify that stxusd-rate is signed by redstine oracle
-    ;; retrieve and store value of nft at expiry --> call determine-value passing expiry
-    ;; if value positive: transfer stx to tx-sender
-    (ok true)
-  )
-  ;; TO ADD: When first called for an expiry AND expiry in the past AND in-the-money, creaet pool of money for payouts (set aside)
-)
-
-(define-private (determine-value (expiry-timestamp uint)) 
-  (ok true)
-)
-
-(define-private (get-options-info (expiry-timestamp uint)) 
-  (ok (unwrap! (map-get? options-info {expiry-timestamp: expiry-timestamp}) err-no-info-for-expiry))
 )
