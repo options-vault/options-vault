@@ -13,6 +13,7 @@
 (define-constant err-no-info-for-expiry (err u106))
 (define-constant err-initialization-start (err u107))
 (define-constant err-no-active-auction (err u108))
+(define-constant err-options-sold-out (err u109))
 
 (define-constant symbol-stxusd 0x535458555344) ;; "STXUSD" as a buff
 (define-constant redstone-value-shift u100000000)
@@ -117,10 +118,17 @@
 			(token-id (+ (var-get token-id-nonce) u1))
 			(expiry-next-cycle (+ (var-get current-cycle-expiry) week-in-seconds))
 			(current-options-info (unwrap-panic (map-get? options-info { expiry-timestamp: expiry-next-cycle })))
+			(options-minted-amount (- (get last-token-id current-options-info) (get first-token-id current-options-info)))
 		)
 		;; Check if the signer is a trusted oracle. If it fails, then the possible price
 		;; update via get-update-latest-price-in-stx is also reverted. This is important.
 		(asserts! (is-trusted-oracle signer) err-untrusted-oracle)
+		;; Check if options-nft are available for sale. The contract can only sell as many options-nfts as there are funds in the vault
+		;; TODO: make sure the decimals between balances in the vault and options-minted-amount match
+		;; --> total-balances has to rounded down to a full number (full STX)
+		;; UNCOMMENT WHEN UPDATES FROM VAULT HAVE BEEN MERGED
+		;; (asserts! (< options-minted-amount (contract-call? .vault get-total-balances)) (err err-options-sold-out))
+
 		;; Check if mint function is being called in the auction window of start + 25 blocks
 		(asserts! (and
 			(>= block-height (var-get auction-start-block-height))
