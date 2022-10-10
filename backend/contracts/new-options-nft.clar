@@ -3,6 +3,7 @@
 ;; SIP009 NFT trait on mainnet
 ;; (impl-trait 'SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.nft-trait.nft-trait)
 
+;; TODO: capitalized error codes to comply with coding best practices
 (define-constant err-not-contract-owner (err u100))
 (define-constant err-untrusted-oracle (err u101))
 (define-constant err-stale-rate (err u102))
@@ -42,6 +43,8 @@
 (define-constant week-in-seconds u604800)
 (define-constant min-in-seconds u60)
 
+;; TODO: Add fail-safe public function that allows contract-owner to manually initalize the next cycle. 
+
 ;; FUNCTION TO RECEIVE PRICE DATA FROM SERVER
 
 ;; #[allow(unchecked_data)]
@@ -80,7 +83,7 @@
 			(expiry-next-cycle (+ (var-get current-cycle-expiry) week-in-seconds))
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
 		)
-		(map-set options-info { expiry-timestamp: expiry-next-cycle } {strike: strike, first-token-id: first-token-id, last-token-id: first-token-id})
+		(map-set options-info { expiry-timestamp: expiry-next-cycle } { strike: strike, first-token-id: first-token-id, last-token-id: first-token-id })
 		(set-options-price stxusd-rate)
 		(var-set auction-start-block-height block-height)
 		(var-set auction-decrement-value (/ (* (unwrap-panic (var-get price-in-usd)) u25) u1000))
@@ -88,20 +91,22 @@
 	)
 )
 
+;; TODO: refactor the last part of submit-price-data so that no-init function is not needed
+
 (define-private (no-init) 
 	(ok true)
 )
 
 (define-private (set-options-price (stxusd-rate uint)) 
-	;; The price is determined using a simplified calculation that prices the options at 0.5% of the stxusd price.
-	;; If all 52 weekly options for a year would expiry worthless a uncompounded 26% APY would be achieved.
-	;; In the next iteration we intend to replace this simplified calculation with the Black Scholes formula - the industry standard. 
+	;; The price is determined using a simplified calculation that sets options price as 0.5% of the stxusd price.
+	;; If all 52 weekly options for a year would expiry worthless, a uncompounded 26% APY would be achieved by this pricing strategy.
+	;; In the next iteration we intend to replace this simplified calculation with the Black Scholes formula - the industry standard for pricing European style options. 
 	(var-set price-in-usd (some (/ stxusd-rate u5000)))
 )
 
 ;; NFT MINTING (Priced in USD, payed in STX)
 
-;; TO DO: map-set options-info with the expiry and strike price
+;; TO DO: limit options that can be sold according to deposits in vault
 
 ;; #[allow(unchecked_data)]
 (define-public (mint (timestamp uint) (stxusd-rate uint) (signature (buff 65)))
@@ -110,6 +115,8 @@
 			;; Recover the pubkey of the signer.
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
 			(token-id (+ (var-get token-id-nonce) u1))
+			(expiry-next-cycle (+ (var-get current-cycle-expiry) week-in-seconds))
+			(current-options-info (unwrap-panic (map-get? options-info { expiry-timestamp: expiry-next-cycle })))
 		)
 		;; Check if the signer is a trusted oracle. If it fails, then the possible price
 		;; update via get-update-latest-price-in-stx is also reverted. This is important.
@@ -128,6 +135,14 @@
 		(try! (stx-transfer? (try! (get-update-latest-price-in-stx timestamp stxusd-rate)) tx-sender (var-get contract-owner)))
 		;; Mint the NFT.
 		(try! (nft-mint? options-nft token-id tx-sender))
+		;; Add the token-id of the minted NFT as the last-token-id in the options-info map
+		(map-set options-info 
+			{ expiry-timestamp: expiry-next-cycle } 
+			(merge
+				current-options-info
+				{ last-token-id: token-id }
+			)
+		)
 		(ok token-id)
 	)
 )
