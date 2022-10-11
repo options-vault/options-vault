@@ -15,9 +15,11 @@
 
 ;; Ledger map to store balances and withdraw/deposit requests for each principal (investor type / vault)
 (define-map ledger principal { address: principal, balance: uint, pending-deposits: uint, pending-withdraw: uint })
-;; (map-set ledger CONTRACT_ADDRESS { address: CONTRACT_ADDRESS, balance: u0, pending-deposits: u0, pending-withdraw: u0 })
+
+(define-data-var investors-address (list 1000 principal) (list))
 
 (define-data-var total-balances uint u0)
+
 ;; private functions
 
 ;; Functions that checks what is the user's balance/pending-withdraw/pending-deposit in the vault
@@ -59,6 +61,11 @@
 
 (define-private (add-pending-withdraw (amount uint))
   (+ (get-pending-withdraw) amount)
+)
+
+;; Update investors-address list - helper function
+(define-private (add-to-list (investor principal))
+  (var-set investors-address (unwrap-panic (as-max-len? (append (var-get investors-address) investor) u1000)))
 )
 
 ;; public functions
@@ -192,7 +199,7 @@
             pending-withdraw: u0
           }
         )
-      true
+      (add-to-list tx-sender)
       (map-set ledger  
         tx-sender
         (merge 
@@ -266,6 +273,7 @@
           (investor-balance (get balance investor-info))
           (premium-slice (* (/ investor-balance vault-balance) premium-balance))
         )
+        (try! (as-contract (stx-transfer? premium-slice tx-sender investor)))
         (map-set ledger
           investor
           (merge 
@@ -275,22 +283,23 @@
                 (+  premium-slice investor-balance)
             }
           )
-        )     
+        )
+        (ok "PREMIUM SLICE ADDED TO BALANCE")
   )
-)
-
-(define-private (unwrapper (wallet tuple)) 
-  (get tx-sender wallet)
 )
 
 (define-public (distributor)
-  (map evaluator 
-    
+  (begin 
+    (map evaluator (var-get investors-address))
+    (ok true)
   )
-  (map unwrapper ledger)
 )
 
 ;; Consult the total investor balances
 (define-read-only (get-total-balances) 
   (var-get total-balances)
+)
+
+(define-read-only (get-investors-list) 
+  (var-get investors-address)
 )
