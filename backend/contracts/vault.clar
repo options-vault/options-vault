@@ -17,6 +17,7 @@
 (define-map ledger { principal: principal } { balance: uint, pending-deposits: uint, pending-withdraw: uint })
 (map-set ledger { principal: CONTRACT_ADDRESS } { balance: u0, pending-deposits: u0, pending-withdraw: u0 })
 
+(define-data-var total-balances uint u0)
 ;; private functions
 
 ;; Functions that checks what is the user's balance/pending-withdraw/pending-deposit in the vault
@@ -80,6 +81,7 @@
         (asserts! (> pending-deposit u0) INVALID_AMOUNT)
         (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
         (try! (stx-transfer? pending-deposit tx-sender CONTRACT_ADDRESS))
+        (var-set total-balances (+ (var-get total-balances) pending-deposit))
         (map-set ledger
           sender-tuple 
           (merge
@@ -232,6 +234,7 @@
         (asserts! (>= balance pending-withdraw) INSUFFICIENT_FUNDS)
         (asserts! (> pending-withdraw u0) INVALID_AMOUNT)
         (try! (as-contract (stx-transfer? pending-withdraw tx-sender (get principal sender-tuple))))
+        (var-set total-balances (- (var-get total-balances) pending-withdraw))
         (map-set ledger
           sender-tuple 
           (merge
@@ -268,4 +271,28 @@
         )
         (ok true)
   )
+)
+
+;; Distribute the premium between all the investor in the vault (depending of their participation rate)
+
+;; (define-private (evaluator (investor principal)) 
+;;   (let  (
+;;           (vault-balance (var-get total-balances))
+;;           (investor-balance (get-balance))
+;;           (investor-balances-tuple (unwrap-panic (map-get? ledger { principal: investor })))
+;;           (premium-slice (* (/ (get balance investor-balances-tuple) vault-balance) ))
+;;         )
+;;         (map-set ledger 
+;;           investor-balances-tuple
+;;           {
+;;             balance: 
+;;               (+  premium-slice investor-balance)
+;;           }
+;;         )     
+;;   )
+;; )
+
+;; Consult the total investor balances
+(define-read-only (get-total-balances) 
+  (var-get total-balances)
 )
