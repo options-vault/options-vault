@@ -14,8 +14,8 @@
 ;; data maps and vars
 
 ;; Ledger map to store balances and withdraw/deposit requests for each principal (investor type / vault)
-(define-map ledger { principal: principal } { balance: uint, pending-deposits: uint, pending-withdraw: uint })
-(map-set ledger { principal: CONTRACT_ADDRESS } { balance: u0, pending-deposits: u0, pending-withdraw: u0 })
+(define-map ledger principal { address: principal, balance: uint, pending-deposits: uint, pending-withdraw: uint })
+;; (map-set ledger CONTRACT_ADDRESS { address: CONTRACT_ADDRESS, balance: u0, pending-deposits: u0, pending-withdraw: u0 })
 
 (define-data-var total-balances uint u0)
 ;; private functions
@@ -24,7 +24,7 @@
 
 ;; Balance helper functions
 (define-read-only (get-balance)
-  (get balance (map-get? ledger { principal: tx-sender}))
+  (get balance (map-get? ledger tx-sender))
 )
 
 (define-private (add-to-balance (amount uint)) 
@@ -37,7 +37,7 @@
 
 ;; Deposit helper functions
 (define-read-only (get-pending-deposit) 
-  (default-to u0 (get pending-deposits (map-get? ledger { principal: tx-sender})))
+  (default-to u0 (get pending-deposits (map-get? ledger tx-sender)))
 )
 
 (define-private (add-pending-deposit (amount uint))
@@ -50,7 +50,7 @@
 
 ;; Withdraw helper functions
 (define-read-only (get-pending-withdraw) 
-  (default-to u0 (get pending-withdraw (map-get? ledger { principal: tx-sender})))
+  (default-to u0 (get pending-withdraw (map-get? ledger tx-sender)))
 )
 
 (define-private (substract-pending-withdraw (amount uint)) 
@@ -74,8 +74,7 @@
 ;; Q: Can the deployer contract invest?
 (define-public (deposit-investor) 
   (let (
-          (sender-tuple { principal: tx-sender })
-          (sender-balances (unwrap! (map-get? ledger sender-tuple) TX_SENDER_NOT_IN_LEDGER))
+          (sender-info (unwrap! (map-get? ledger tx-sender) TX_SENDER_NOT_IN_LEDGER))
           (pending-deposit (get-pending-deposit))
         )
         (asserts! (> pending-deposit u0) INVALID_AMOUNT)
@@ -83,9 +82,9 @@
         (try! (stx-transfer? pending-deposit tx-sender CONTRACT_ADDRESS))
         (var-set total-balances (+ (var-get total-balances) pending-deposit))
         (map-set ledger
-          sender-tuple 
+          tx-sender 
           (merge
-            sender-balances
+            sender-info
             {
               balance: 
                 (add-to-balance pending-deposit),
@@ -119,24 +118,11 @@
 ;; 2. deposit function as premium (vault)
 
 (define-public (deposit-premium (amount uint)) 
-  (let (
-          (contract-tuple { principal: CONTRACT_ADDRESS })
-          (contract-balances (unwrap-panic (map-get? ledger contract-tuple)))
-        )
-        (asserts! (> amount u0) INVALID_AMOUNT)
-        (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
-        (try! (stx-transfer? amount tx-sender CONTRACT_ADDRESS))
-        (map-set ledger
-          contract-tuple 
-          (merge
-            contract-balances
-            {
-              balance: 
-                (as-contract (add-to-balance amount)),
-            }
-          )
-        )
-        (ok true)
+  (begin
+    (asserts! (> amount u0) INVALID_AMOUNT)
+    (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
+    (try! (stx-transfer? amount tx-sender CONTRACT_ADDRESS))
+    (ok true)
   )
 )
 
@@ -194,32 +180,31 @@
 ;; )
 
 (define-public (queue-deposit (amount uint)) 
-  (let  (
-          (sender-tuple { principal: tx-sender })
+  (begin
+    (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
+    (asserts! (> amount u0) INVALID_AMOUNT)
+    (if (map-insert ledger 
+          tx-sender
+          {
+            address: tx-sender,
+            balance: u0,
+            pending-deposits: amount,
+            pending-withdraw: u0
+          }
         )
-        (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
-        (asserts! (> amount u0) INVALID_AMOUNT)
-        (if (map-insert ledger 
-              sender-tuple
-              {
-                balance: u0,
-                pending-deposits: amount,
-                pending-withdraw: u0
-              }
-            )
-          true
-          (map-set ledger  
-            sender-tuple
-            (merge 
-              (unwrap-panic (map-get? ledger { principal: tx-sender }))
-              {
-                pending-deposits:
-                  (add-pending-deposit amount) 
-              }
-            )
-          )
+      true
+      (map-set ledger  
+        tx-sender
+        (merge 
+          (unwrap-panic (map-get? ledger tx-sender))
+          {
+            pending-deposits:
+              (add-pending-deposit amount) 
+          }
         )
-        (ok true)     
+      )
+    )
+    (ok true)     
   )
 )
 
@@ -228,17 +213,16 @@
   (let  (
           (balance (unwrap! (get-balance) TX_SENDER_NOT_IN_LEDGER))
           (pending-withdraw (get-pending-withdraw))
-          (sender-tuple { principal: tx-sender })
-          (sender-balances (unwrap-panic (map-get? ledger { principal: tx-sender })))
+          (sender-info (unwrap-panic (map-get? ledger tx-sender)))
         )
         (asserts! (>= balance pending-withdraw) INSUFFICIENT_FUNDS)
         (asserts! (> pending-withdraw u0) INVALID_AMOUNT)
-        (try! (as-contract (stx-transfer? pending-withdraw tx-sender (get principal sender-tuple))))
+        (try! (as-contract (stx-transfer? pending-withdraw tx-sender (get address sender-info))))
         (var-set total-balances (- (var-get total-balances) pending-withdraw))
         (map-set ledger
-          sender-tuple 
+          tx-sender
           (merge
-            sender-balances
+            sender-info
             {
               balance: 
                 (substract-to-balance pending-withdraw),
@@ -255,14 +239,13 @@
   (let  (
           (balance (unwrap! (get-balance) TX_SENDER_NOT_IN_LEDGER))
           (pending-withdraw (get-pending-withdraw))
-          (sender-tuple { principal: tx-sender })
-          (sender-balances (unwrap-panic (map-get? ledger { principal: tx-sender })))
+          (sender-info (unwrap-panic (map-get? ledger tx-sender)))
         )
         (asserts! (>= balance (+ pending-withdraw amount)) INSUFFICIENT_FUNDS)
         (map-set ledger  
-          sender-tuple
+          tx-sender
           (merge 
-            sender-balances
+            sender-info
             {
               pending-withdraw:
                 (add-pending-withdraw amount) 
@@ -278,30 +261,34 @@
 (define-private (evaluator (investor principal)) 
   (let  (
           (vault-balance (var-get total-balances))
-          (investor-balance (get-balance))
-          (investor-tuple { principal: investor })
-          (investor-balances-tuple (unwrap-panic (map-get? ledger { principal: investor })))
-          (premium-slice (* (/ (get balance investor-balances-tuple) vault-balance) (- (stx-get-balance CONTRACT_ADDRESS) vault-balance)))
+          (premium-balance (- (stx-get-balance CONTRACT_ADDRESS) vault-balance))
+          (investor-info (unwrap-panic (map-get? ledger investor)))
+          (investor-balance (get balance investor-info))
+          (premium-slice (* (/ investor-balance vault-balance) premium-balance))
         )
         (map-set ledger
-          investor-tuple
+          investor
           (merge 
-            investor-balances-tuple
+            investor-info
             {
               balance: 
-                (+  premium-slice (unwrap-panic investor-balance))
+                (+  premium-slice investor-balance)
             }
           )
         )     
   )
 )
 
-;; (define-public (distributor) 
-;;   (map 
-;;     evaluator 
-;;     (map (get principal ) sequence)
-;;   )
-;; )
+(define-private (unwrapper (wallet tuple)) 
+  (get tx-sender wallet)
+)
+
+(define-public (distributor)
+  (map evaluator 
+    
+  )
+  (map unwrapper ledger)
+)
 
 ;; Consult the total investor balances
 (define-read-only (get-total-balances) 
