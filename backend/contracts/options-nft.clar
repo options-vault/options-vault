@@ -40,13 +40,15 @@
 (define-data-var price-in-usd (optional uint) none) 
 
 (define-data-var current-cycle-expiry uint u1665763200) ;; set to Fri Oct 14 2022 16:00:00 GMT+0000
-(define-data-var auction-start-block-height uint u0)
+(define-data-var mint-open bool false)
+(define-data-var auction-start-timestamp uint u0)
 (define-data-var auction-decrement-value uint u0)
 (define-constant week-in-seconds u604800)
 (define-constant min-in-seconds u60)
 
-;; TODO: Add fail-safe public function that allows contract-owner to manually initalize the next cycle. 
-
+;; TODO: Add fail-safe public function that allows contract-owner to manually initalize AND end the next cycle. 
+;; TODO: Add functions to set start-init-window and end-init-window
+;; TODO: Instead of passing timestamp from receiver functions to later functions, get the timestamp from last-seen-timestamp
 ;; FUNCTION TO RECEIVE PRICE DATA FROM SERVER
 
 ;; TODO: refactor the last part of submit-price-data so that no-init function is not needed
@@ -58,8 +60,8 @@
 		(
 			;; Recover the pubkey of the signer.
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
-			(start-init-window (- (var-get current-cycle-expiry) (* u250 min-in-seconds)))
-			(end-init-window (- (var-get current-cycle-expiry) (* u240 min-in-seconds)))
+			(start-init-window (- (var-get current-cycle-expiry) (* u190 min-in-seconds)))
+			(end-init-window (- (var-get current-cycle-expiry) (* u180 min-in-seconds)))
 		)
 		;; Check if the signer is a trusted oracle.
 		(asserts! (is-trusted-oracle signer) err-untrusted-oracle)
@@ -69,9 +71,10 @@
 		;; Save last seen stxusd price
 		(var-set last-stxusd-rate (some stxusd-rate))
 		;; Save last seen timestamp.
-		(var-set last-seen-timestamp timestamp)		;; check if timestamp > start and timestamp < end of initialization time range
+		(var-set last-seen-timestamp timestamp)		
+		;; check if timestamp > start and timestamp < end of initialization time range
 		(if (and (> timestamp start-init-window) (< timestamp end-init-window))
-		 (unwrap! (initialize-next-cycle) err-initialization-start)
+		 (unwrap! (initialize-next-cycle timestamp) err-initialization-start)
 		 (unwrap! (no-init) err-initialization-start)
 		)
 		(ok true)
@@ -80,7 +83,7 @@
 
 ;; INITIALIZE NEXT CYCLE
 
-(define-private (initialize-next-cycle) 
+(define-private (initialize-next-cycle (timestamp uint)) 
 	(let 
 		(
 			(stxusd-rate (unwrap-panic (var-get last-stxusd-rate)))
@@ -90,8 +93,9 @@
 		)
 		(map-set options-info { expiry-timestamp: next-cycle-expiry } { strike: strike, first-token-id: first-token-id, last-token-id: first-token-id })
 		(set-options-price stxusd-rate)
-		(var-set auction-start-block-height block-height)
-		(var-set auction-decrement-value (/ (* (unwrap-panic (var-get price-in-usd)) u25) u1000))
+		(var-set mint-open true)
+		(var-set auction-start-timestamp timestamp)
+		(var-set auction-decrement-value (/ (unwrap-panic (var-get price-in-usd)) u50)) ;; each decrement represents 2% of the start price
 		(ok true) 
 	)
 )
@@ -104,7 +108,7 @@
 	;; The price is determined using a simplified calculation that sets options price as 0.5% of the stxusd price.
 	;; If all 52 weekly options for a year would expiry worthless, a uncompounded 26% APY would be achieved by this pricing strategy.
 	;; In the next iteration we intend to replace this simplified calculation with the Black Scholes formula - the industry standard for pricing European style options. 
-	(var-set price-in-usd (some (/ stxusd-rate u5000)))
+	(var-set price-in-usd (some (/ stxusd-rate u200)))
 )
 
 ;; NFT MINTING (Priced in USD, payed in STX)
@@ -130,13 +134,22 @@
 		;; (asserts! (< options-minted-amount (contract-call? .vault get-total-balances)) (err err-options-sold-out))
 
 		;; Check if mint function is being called in the auction window of start + 25 blocks
-		(asserts! (and
-			(>= block-height (var-get auction-start-block-height))
-			(< block-height (+ (var-get auction-start-block-height) u25))) 
+		(asserts! 
+			(and
+				(>= timestamp (var-get auction-start-timestamp))
+				;; Check if auciton has run for more than 180 minutes or end-cycle has closed the auction
+				;; Having both checks ensures that (a) the auction never runs longer than 3 hours thus reducing delta risk
+				;; (i.e. the risk of a unfavorable change in the price of the underlying asset) and (b) allows the end-current-cycle
+				;; function to close the auction "manually" to ensure a safe transition the next cycle
+				(and 
+					(< timestamp (+ (var-get auction-start-timestamp) (* min-in-seconds u180)))
+					(var-get mint-open)
+				)
+			) 
 			err-no-active-auction
 		)
 		;; Update the mint price based on where in the 25 block minting window we are 
-		(update-price-in-usd)
+		(update-price-in-usd timestamp)
 		;; Update the token ID nonce.
 		(var-set token-id-nonce token-id)
 		;; Send the STX equivalent to the contract owner. TO DO: send STX to vault contract instead of contract-owner
@@ -155,11 +168,10 @@
 	)
 )
 
-(define-private (update-price-in-usd) 
+(define-private (update-price-in-usd (timestamp uint)) 
 	(let
 		(
-			;; TODO tick down every 5 blocks
-			(decrement (* (mod block-height (var-get auction-start-block-height)) (var-get auction-decrement-value)))
+			(decrement (* (mod (- timestamp (var-get auction-start-timestamp)) (* min-in-seconds u60)) (var-get auction-decrement-value)))
 		)
 		(var-set price-in-usd (some (- (unwrap-panic (var-get price-in-usd)) decrement)))
 	)
@@ -184,16 +196,20 @@
     (asserts! (is-trusted-oracle signer) err-untrusted-oracle)
 		;; Check if provided token-id is in the range for the expiry
 		(asserts! (and (>= token-id first-token-id) (<= token-id last-token-id)) err-token-id-not-in-expiry-range)
+    ;; CURRENT TODO
+		;; Check if options is expired. 
+		;; Expiry is in the past? -->  if not: ERR_OPTION_NOT_EXPIRED
+		;; (asserts! (> timestamp ) (err thrown))
     ;; Transfer options NFT to settlement contract
     (try! (transfer token-id tx-sender (as-contract tx-sender)))
     ;; TO DO: 
-    ;; check if expiry is in the past -->  if not: ERR_OPTION_NOT_EXPIRED
+
     ;; verify that stxusd-rate is signed by redstine oracle
     ;; retrieve and store value of nft at expiry --> call determine-value passing expiry
     ;; if value positive: transfer stx to tx-sender
     (ok true)
   )
-  ;; TO ADD: When first called for an expiry AND expiry in the past AND in-the-money, creaet pool of money for payouts (set aside)
+  ;; TODO: When first called for an expiry AND expiry in the past AND in-the-money, creaet pool of money for payouts (set aside)
 )
 
 (define-private (determine-value (expiry-timestamp uint)) 
