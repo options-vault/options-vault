@@ -11,10 +11,11 @@
 (define-constant err-not-token-owner (err u104))
 (define-constant err-option-not-expired (err u105))
 (define-constant err-no-info-for-expiry (err u106))
-(define-constant err-initialization-start (err u107))
+(define-constant err-cycle-initialization (err u107))
 (define-constant err-no-active-auction (err u108))
 (define-constant err-options-sold-out (err u109))
 (define-constant err-token-id-not-in-expiry-range (err u110))
+(define-constant err-cycle-end (err u111))
 
 (define-constant symbol-stxusd 0x535458555344) ;; "STXUSD" as a buff
 (define-constant redstone-value-shift u100000000)
@@ -62,6 +63,8 @@
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
 			(start-init-window (- (var-get current-cycle-expiry) (* u190 min-in-seconds)))
 			(end-init-window (- (var-get current-cycle-expiry) (* u180 min-in-seconds)))
+			(init-window-active (and (> timestamp start-init-window) (< timestamp end-init-window)))
+			(current-cycle-expired (> timestamp (var-get current-cycle-expiry)))
 		)
 		;; Check if the signer is a trusted oracle.
 		(asserts! (is-trusted-oracle signer) err-untrusted-oracle)
@@ -73,9 +76,13 @@
 		;; Save last seen timestamp.
 		(var-set last-seen-timestamp timestamp)		
 		;; check if timestamp > start and timestamp < end of initialization time range
-		(if (and (> timestamp start-init-window) (< timestamp end-init-window))
-		 (unwrap! (initialize-next-cycle timestamp) err-initialization-start)
-		 (unwrap! (no-init) err-initialization-start)
+		(if init-window-active
+		 (unwrap! (initialize-next-cycle timestamp) err-cycle-initialization)
+		 (unwrap! (no-init) err-cycle-initialization)
+		)
+		(if current-cycle-expired 
+			(unwrap! (end-cycle) err-cycle-end)
+			(unwrap! (no-init) err-cycle-end)
 		)
 		(ok true)
 	)
@@ -102,6 +109,14 @@
 
 (define-private (no-init) 
 	(ok true)
+)
+
+(define-private (end-cycle)
+	(begin 
+		(var-set mint-open false)
+		(var-set current-cycle-expiry (+ (var-get current-cycle-expiry) week-in-seconds))
+		(ok true)
+	) 
 )
 
 (define-private (set-options-price (stxusd-rate uint)) 
@@ -150,11 +165,11 @@
 		)
 		;; Update the mint price based on where in the 25 block minting window we are 
 		(update-price-in-usd timestamp)
-		;; Update the token ID nonce.
+		;; Update the token ID nonce
 		(var-set token-id-nonce token-id)
 		;; Send the STX equivalent to the contract owner. TO DO: send STX to vault contract instead of contract-owner
 		(try! (stx-transfer? (try! (get-update-latest-price-in-stx timestamp stxusd-rate)) tx-sender (var-get contract-owner)))
-		;; Mint the NFT.
+		;; Mint the NFT
 		(try! (nft-mint? options-nft token-id tx-sender))
 		;; Add the token-id of the minted NFT as the last-token-id in the options-info map
 		(map-set options-info 
@@ -196,10 +211,8 @@
     (asserts! (is-trusted-oracle signer) err-untrusted-oracle)
 		;; Check if provided token-id is in the range for the expiry
 		(asserts! (and (>= token-id first-token-id) (<= token-id last-token-id)) err-token-id-not-in-expiry-range)
-    ;; CURRENT TODO
-		;; Check if options is expired. 
-		;; Expiry is in the past? -->  if not: ERR_OPTION_NOT_EXPIRED
-		;; (asserts! (> timestamp ) (err thrown))
+		;; Check if options is expired
+		(asserts! (> timestamp (- (var-get current-cycle-expiry) week-in-seconds)) err-option-not-expired) 
     ;; Transfer options NFT to settlement contract
     (try! (transfer token-id tx-sender (as-contract tx-sender)))
     ;; TO DO: 
