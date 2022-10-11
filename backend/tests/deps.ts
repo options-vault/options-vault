@@ -34,3 +34,19 @@ export function pricePackageToCV(pricePackage: PricePackage) {
 		)
 	};
 }
+
+ export function liteSignatureToStacksSignature(liteSignature:string) {
+	let bytey = hexToBytes(liteSignature)
+	if (bytey.length !== 65)
+		throw new Error(`Invalid liteSignature, expected 65 bytes got ${bytey.length}`);
+	let converted = new Uint8Array(bytey);
+	if (converted[64] > 3)
+		converted[64] -= 27; // subtract from V
+	return converted;
+}
+
+function hexToBytes(hex: string) {
+    for (var bytes = [], c = 0; c < hex.length; c += 2)
+        bytes.push(parseInt(hex.substr(c, 2), 16));
+    return bytes;
+}
