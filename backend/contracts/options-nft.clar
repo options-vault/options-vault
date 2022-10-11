@@ -14,6 +14,7 @@
 (define-constant err-initialization-start (err u107))
 (define-constant err-no-active-auction (err u108))
 (define-constant err-options-sold-out (err u109))
+(define-constant err-token-id-not-in-expiry-range (err u110))
 
 (define-constant symbol-stxusd 0x535458555344) ;; "STXUSD" as a buff
 (define-constant redstone-value-shift u100000000)
@@ -48,6 +49,9 @@
 
 ;; FUNCTION TO RECEIVE PRICE DATA FROM SERVER
 
+;; TODO: refactor the last part of submit-price-data so that no-init function is not needed
+;; TODO: implement helper functiont that abstracts away recover-signer contract call and is-trusted-oracle assert 
+
 ;; #[allow(unchecked_data)]
 (define-public (submit-price-data (timestamp uint) (stxusd-rate uint) (signature (buff 65)))
 	(let 
@@ -81,18 +85,16 @@
 		(
 			(stxusd-rate (unwrap-panic (var-get last-stxusd-rate)))
 			(strike (/ (* stxusd-rate u115) u100))
-			(expiry-next-cycle (+ (var-get current-cycle-expiry) week-in-seconds))
+			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-seconds))
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
 		)
-		(map-set options-info { expiry-timestamp: expiry-next-cycle } { strike: strike, first-token-id: first-token-id, last-token-id: first-token-id })
+		(map-set options-info { expiry-timestamp: next-cycle-expiry } { strike: strike, first-token-id: first-token-id, last-token-id: first-token-id })
 		(set-options-price stxusd-rate)
 		(var-set auction-start-block-height block-height)
 		(var-set auction-decrement-value (/ (* (unwrap-panic (var-get price-in-usd)) u25) u1000))
 		(ok true) 
 	)
 )
-
-;; TODO: refactor the last part of submit-price-data so that no-init function is not needed
 
 (define-private (no-init) 
 	(ok true)
@@ -107,8 +109,6 @@
 
 ;; NFT MINTING (Priced in USD, payed in STX)
 
-;; TO DO: limit options that can be sold according to deposits in vault
-
 ;; #[allow(unchecked_data)]
 (define-public (mint (timestamp uint) (stxusd-rate uint) (signature (buff 65)))
 	(let
@@ -116,9 +116,9 @@
 			;; Recover the pubkey of the signer.
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
 			(token-id (+ (var-get token-id-nonce) u1))
-			(expiry-next-cycle (+ (var-get current-cycle-expiry) week-in-seconds))
-			(current-options-info (unwrap-panic (map-get? options-info { expiry-timestamp: expiry-next-cycle })))
-			(options-minted-amount (- (get last-token-id current-options-info) (get first-token-id current-options-info)))
+			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-seconds))
+      (next-cycle-options-info (try! (get-options-info next-cycle-expiry)))
+			(options-minted-amount (- (get last-token-id next-cycle-options-info) (get first-token-id next-cycle-options-info)))
 		)
 		;; Check if the signer is a trusted oracle. If it fails, then the possible price
 		;; update via get-update-latest-price-in-stx is also reverted. This is important.
@@ -145,9 +145,9 @@
 		(try! (nft-mint? options-nft token-id tx-sender))
 		;; Add the token-id of the minted NFT as the last-token-id in the options-info map
 		(map-set options-info 
-			{ expiry-timestamp: expiry-next-cycle } 
+			{ expiry-timestamp: next-cycle-expiry } 
 			(merge
-				current-options-info
+				next-cycle-options-info
 				{ last-token-id: token-id }
 			)
 		)
@@ -166,23 +166,24 @@
 
 ;; SETTLEMENT
 
-;; TO DO: verify that provided token-id corresponds to provided expiry date
-;; + add err code for token-id not in range (err-token-id-not-in-expiry-range)
-
-;; settles option-nfts
 ;; #[allow(unchecked_data)] 
 (define-public (settle (token-id uint) (timestamp uint) (stxusd-rate uint) (signature (buff 65))) 
   (let
     (
       ;; Recover the pubkey of the signer
       (signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
-      ;; retrieve and store strike price for expiry
-      (strike (get strike (try! (get-options-info (var-get current-cycle-expiry))))) 
+      (current-cycle-options-info (try! (get-options-info (var-get current-cycle-expiry))))
+			;; retrieve and store strike price for expiry
+      (strike (get strike current-cycle-options-info)) 
+      (first-token-id (get first-token-id current-cycle-options-info)) 
+      (last-token-id (get last-token-id current-cycle-options-info)) 
+
     ) 
 		;; Check if the signer is a trusted oracle
     (asserts! (is-trusted-oracle signer) err-untrusted-oracle)
-
-    ;; transfer options NFT to settlement contract
+		;; Check if provided token-id is in the range for the expiry
+		(asserts! (and (>= token-id first-token-id) (<= token-id last-token-id)) err-token-id-not-in-expiry-range)
+    ;; Transfer options NFT to settlement contract
     (try! (transfer token-id tx-sender (as-contract tx-sender)))
     ;; TO DO: 
     ;; check if expiry is in the past -->  if not: ERR_OPTION_NOT_EXPIRED
