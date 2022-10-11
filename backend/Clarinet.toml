@@ -10,7 +10,7 @@ boot_contracts = ["pox", "costs-v2", "bns"]
 path = ".requirements"
 
 [contracts.new-options-nft]
-path = "contracts/new-options-nft.clar"
+path = "contracts/options-nft.clar"
 
 [contracts.redstone-verify]
 path = "contracts/redstone-verify.clar"
