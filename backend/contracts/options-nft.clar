@@ -16,6 +16,7 @@
 (define-constant err-options-sold-out (err u109))
 (define-constant err-token-id-not-in-expiry-range (err u110))
 (define-constant err-cycle-end (err u111))
+(define-constant err-determine-value (err u112))
 
 (define-constant symbol-stxusd 0x535458555344) ;; "STXUSD" as a buff
 (define-constant redstone-value-shift u100000000)
@@ -32,7 +33,7 @@
 (map-set trusted-oracles 0x035ca791fed34bf9e9d54c0ce4b9626e1382cf13daa46aa58b657389c24a751cc6 true)
 
 ;; A map that holds the strike price for each contract and assigns token-ids to expiry
-(define-map options-info { expiry-timestamp: uint } { strike: uint, first-token-id: uint, last-token-id: uint })
+(define-map options-info { expiry-timestamp: uint } { strike: uint, first-token-id: uint, last-token-id: uint, option-pnl: (optional uint), total-pnl: (optional uint) })
 
 ;; Last seen timestamp. The if clause is so that the contract can deploy on a Clarinet console session.
 (define-data-var last-seen-timestamp uint (if (> block-height u0) (get-last-block-timestamp) u0))
@@ -50,9 +51,9 @@
 ;; TODO: Add fail-safe public function that allows contract-owner to manually initalize AND end the next cycle. 
 ;; TODO: Add functions to set start-init-window and end-init-window
 ;; TODO: Instead of passing timestamp from receiver functions to later functions, get the timestamp from last-seen-timestamp
+
 ;; FUNCTION TO RECEIVE PRICE DATA FROM SERVER
 
-;; TODO: refactor the last part of submit-price-data so that no-init function is not needed
 ;; TODO: implement helper functiont that abstracts away recover-signer contract call and is-trusted-oracle assert 
 
 ;; #[allow(unchecked_data)]
@@ -78,11 +79,11 @@
 		;; check if timestamp > start and timestamp < end of initialization time range
 		(if init-window-active
 		 (unwrap! (initialize-next-cycle timestamp) err-cycle-initialization)
-		 (unwrap! (no-init) err-cycle-initialization)
+		 (unwrap! (ok true) err-cycle-initialization)
 		)
 		(if current-cycle-expired 
 			(unwrap! (end-cycle) err-cycle-end)
-			(unwrap! (no-init) err-cycle-end)
+			(unwrap! (ok true) err-cycle-end)
 		)
 		(ok true)
 	)
@@ -98,7 +99,15 @@
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-seconds))
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
 		)
-		(map-set options-info { expiry-timestamp: next-cycle-expiry } { strike: strike, first-token-id: first-token-id, last-token-id: first-token-id })
+		(map-set options-info { expiry-timestamp: next-cycle-expiry } 
+			{ 
+			strike: strike, 
+			first-token-id: first-token-id, 
+			last-token-id: first-token-id,
+			option-pnl: none,
+			total-pnl: none 
+			}
+		)
 		(set-options-price stxusd-rate)
 		(var-set mint-open true)
 		(var-set auction-start-timestamp timestamp)
@@ -107,17 +116,46 @@
 	)
 )
 
-(define-private (no-init) 
-	(ok true)
-)
-
 (define-private (end-cycle)
 	(begin 
 		(var-set mint-open false)
+		(asserts! (unwrap-panic (determine-and-set-value)) err-determine-value)
 		(var-set current-cycle-expiry (+ (var-get current-cycle-expiry) week-in-seconds))
 		(ok true)
 	) 
 )
+
+(define-private (determine-and-set-value)
+	(let
+		(
+			(stxusd-rate (unwrap-panic (var-get last-stxusd-rate)))
+			(settlement-expiry (var-get current-cycle-expiry))
+	  	(settlement-options-info (try! (get-options-info settlement-expiry)))
+    	(strike (get strike settlement-options-info))
+			(options-minted-amount (- (get first-token-id settlement-options-info) (get last-token-id settlement-options-info)))
+		)
+		(if (> strike stxusd-rate) 
+			;; option is in-the-money and the pnl is positive
+			(map-set options-info 
+				{ expiry-timestamp: settlement-expiry } 
+				(merge
+					settlement-options-info
+					{ option-pnl: (some (- strike stxusd-rate)), total-pnl: (some (* (- strike stxusd-rate) options-minted-amount)) }
+				)
+			)
+			;; option is out-of-the-money and the pnl is zero
+			(map-set options-info 
+				{ expiry-timestamp: settlement-expiry } 
+				(merge
+					settlement-options-info
+					{ option-pnl: (some u0), total-pnl: (some u0) }
+				)
+			)
+		)
+  	(ok true)
+	)
+)
+
 
 (define-private (set-options-price (stxusd-rate uint)) 
 	;; The price is determined using a simplified calculation that sets options price as 0.5% of the stxusd price.
@@ -194,30 +232,47 @@
 
 ;; SETTLEMENT
 
+;; TODO: need ability to map token-id to an expiry-timestamp
+;; --> need a list that holds tuples with { expiry-timestamp: uint, last-token-id: uint }
+;; Tuple is appended to the list in end-cycle method
+;; in settle we call find-expiry which iterates over the list to find the matching expiry-timestamp  
+
 ;; #[allow(unchecked_data)] 
 (define-public (settle (token-id uint) (timestamp uint) (stxusd-rate uint) (signature (buff 65))) 
   (let
     (
       ;; Recover the pubkey of the signer
       (signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
-      (current-cycle-options-info (try! (get-options-info (var-get current-cycle-expiry))))
-			;; retrieve and store strike price for expiry
-      (strike (get strike current-cycle-options-info)) 
-      (first-token-id (get first-token-id current-cycle-options-info)) 
-      (last-token-id (get last-token-id current-cycle-options-info)) 
-
+			(settlement-expiry (- (var-get current-cycle-expiry) week-in-seconds))
+      (settlement-options-info (try! (get-options-info settlement-expiry)))
+      (strike (get strike settlement-options-info)) 
+      (first-token-id (get first-token-id settlement-options-info)) 
+      (last-token-id (get last-token-id settlement-options-info)) 
+			(options-minted-amount (- last-token-id first-token-id))
+			;; (options-pnl ())
     ) 
 		;; Check if the signer is a trusted oracle
     (asserts! (is-trusted-oracle signer) err-untrusted-oracle)
 		;; Check if provided token-id is in the range for the expiry
 		(asserts! (and (>= token-id first-token-id) (<= token-id last-token-id)) err-token-id-not-in-expiry-range)
+		;; TODO: Change to checking if option-pnl has been set or is none
+		
 		;; Check if options is expired
-		(asserts! (> timestamp (- (var-get current-cycle-expiry) week-in-seconds)) err-option-not-expired) 
-    ;; Transfer options NFT to settlement contract
-    (try! (transfer token-id tx-sender (as-contract tx-sender)))
-    ;; TO DO: 
+		(asserts! (> timestamp settlement-expiry) err-option-not-expired) 
+    
+		;; Check if options-pnl none
+			;; if none: 
+				;; call determine-value 
+				;; set option-pnl and total-cycle-pnl in options-info
+				;; 
+			;; if uint: do nothing
 
-    ;; verify that stxusd-rate is signed by redstine oracle
+		
+		;; Transfer options NFT to settlement contract
+    (try! (transfer token-id tx-sender (as-contract tx-sender)))
+
+
+    ;; TO DO: 
     ;; retrieve and store value of nft at expiry --> call determine-value passing expiry
     ;; if value positive: transfer stx to tx-sender
     (ok true)
@@ -225,9 +280,7 @@
   ;; TODO: When first called for an expiry AND expiry in the past AND in-the-money, creaet pool of money for payouts (set aside)
 )
 
-(define-private (determine-value (expiry-timestamp uint)) 
-  (ok true)
-)
+
 
 ;; NFT HELPER FUNCTOINS
 
