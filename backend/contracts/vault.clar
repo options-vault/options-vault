@@ -275,20 +275,31 @@
 
 ;; Distribute the premium between all the investor in the vault (depending of their participation rate)
 
-;; (define-private (evaluator (investor principal)) 
-;;   (let  (
-;;           (vault-balance (var-get total-balances))
-;;           (investor-balance (get-balance))
-;;           (investor-balances-tuple (unwrap-panic (map-get? ledger { principal: investor })))
-;;           (premium-slice (* (/ (get balance investor-balances-tuple) vault-balance) ))
-;;         )
-;;         (map-set ledger 
-;;           investor-balances-tuple
-;;           {
-;;             balance: 
-;;               (+  premium-slice investor-balance)
-;;           }
-;;         )     
+(define-private (evaluator (investor principal)) 
+  (let  (
+          (vault-balance (var-get total-balances))
+          (investor-balance (get-balance))
+          (investor-tuple { principal: investor })
+          (investor-balances-tuple (unwrap-panic (map-get? ledger { principal: investor })))
+          (premium-slice (* (/ (get balance investor-balances-tuple) vault-balance) (- (stx-get-balance CONTRACT_ADDRESS) vault-balance)))
+        )
+        (map-set ledger
+          investor-tuple
+          (merge 
+            investor-balances-tuple
+            {
+              balance: 
+                (+  premium-slice (unwrap-panic investor-balance))
+            }
+          )
+        )     
+  )
+)
+
+;; (define-public (distributor) 
+;;   (map 
+;;     evaluator 
+;;     (map (get principal ) sequence)
 ;;   )
 ;; )
 
