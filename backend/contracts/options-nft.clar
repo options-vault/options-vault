@@ -158,6 +158,7 @@
 (define-private (update-price-in-usd) 
 	(let
 		(
+			;; TODO tick down every 5 blocks
 			(decrement (* (mod block-height (var-get auction-start-block-height)) (var-get auction-decrement-value)))
 		)
 		(var-set price-in-usd (some (- (unwrap-panic (var-get price-in-usd)) decrement)))
