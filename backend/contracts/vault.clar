@@ -74,8 +74,7 @@
 ;; 1. When cases 2 o 3 are executed at the end of the cycle
 ;; 1.1 For case 3 transfer all the premium + earnings to the user 2
 ;; 1.2 For case 2 transfer part of the premium to the user 2 and the other part to the vault
-;; 2. When the vault earns premium from case 1 or 2 
-;; 2.1 distribute the premium between all the investor in the vault (depending of their participation rate)
+;; 2. When the vault earns premium from case 1 or 2
 
 ;; 1. Deposit function as investor
 ;; Q: Can the deployer contract invest?
@@ -104,24 +103,6 @@
   )
 )
 
-;; (define-public (deposit-investor (amount uint))
-;;   (begin
-;;     (asserts! (> amount u0) INVALID_AMOUNT)
-;;     (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
-;;     (try! (stx-transfer? amount tx-sender CONTRACT_ADDRESS))
-;;     (map-set ledger
-;;     { principal: tx-sender } 
-;;     { balance: 
-;;         (add-to-balance amount), 
-;;       pending-deposits: 
-;;         (get-pending-deposit), 
-;;       pending-withdraw:
-;;         (get-pending-withdraw) }
-;;     )
-;;     (ok true)
-;;   )
-;; )
-
 ;; 2. deposit function as premium (vault)
 
 (define-public (deposit-premium (amount uint)) 
@@ -132,59 +113,6 @@
     (ok true)
   )
 )
-
-;; (define-public (deposit-premium) 
-;;   (let (
-;;           (contract-tuple { principal: CONTRACT_ADDRESS })
-;;           (sender-tuple { principal: tx-sender })
-;;           (sender-balances (unwrap! (map-get? ledger sender-tuple) TX_SENDER_NOT_IN_LEDGER))
-;;           (contract-balances (unwrap-panic (map-get? ledger contract-tuple)))
-;;           (pending-deposit (get-pending-deposit))
-;;         )
-;;         (asserts! (> pending-deposit u0) INVALID_AMOUNT)
-;;         (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
-;;         (try! (stx-transfer? pending-deposit tx-sender CONTRACT_ADDRESS))
-;;         (map-set ledger
-;;           contract-tuple 
-;;           (merge
-;;             contract-balances
-;;             {
-;;               balance: 
-;;                 (as-contract (add-to-balance pending-deposit)),
-;;             }
-;;           )
-;;         )
-;;         (map-set ledger
-;;           sender-tuple 
-;;           (merge
-;;             sender-balances
-;;             {
-;;               pending-deposits: 
-;;                 (substract-pending-deposit pending-deposit)
-;;             }
-;;           )
-;;         )
-;;         (ok true)
-;;   )
-;; )
-
-;; (define-public (deposit-premium (amount uint))
-;;   (begin
-;;     (asserts! (> amount u0) INVALID_AMOUNT)
-;;     (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
-;;     (try! (stx-transfer? amount tx-sender CONTRACT_ADDRESS))
-;;     (map-set ledger  
-;;     { principal: CONTRACT_ADDRESS } 
-;;     { balance: 
-;;         (as-contract (add-to-balance amount)), 
-;;       pending-deposits: 
-;;         (as-contract (get-pending-deposit)), 
-;;       pending-withdraw:
-;;         (as-contract (get-pending-withdraw)) }
-;;     )
-;;     (ok true)
-;;   )
-;; )
 
 (define-public (queue-deposit (amount uint)) 
   (begin
