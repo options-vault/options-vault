@@ -36,10 +36,11 @@ export function pricePackageToCV(pricePackage: PricePackage) {
 }
 
  export function liteSignatureToStacksSignature(liteSignature:string) {
-	let bytey = hexToBytes(liteSignature)
-	if (bytey.length !== 65)
-		throw new Error(`Invalid liteSignature, expected 65 bytes got ${bytey.length}`);
-	let converted = new Uint8Array(bytey);
+	let bytes = hexToBytes(liteSignature)
+	bytes = bytes.slice(1, bytes.length)
+	if (bytes.length !== 65)
+		throw new Error(`Invalid liteSignature, expected 65 bytes got ${bytes.length}`);
+	let converted = new Uint8Array(bytes);
 	if (converted[64] > 3)
 		converted[64] -= 27; // subtract from V
 	return converted;
@@ -50,3 +51,4 @@ function hexToBytes(hex: string) {
         bytes.push(parseInt(hex.substr(c, 2), 16));
     return bytes;
 }
+
