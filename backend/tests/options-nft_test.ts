@@ -26,13 +26,6 @@ Clarinet.test({
 			], wallet_1)
 		]);
 
-        block = chain.mineBlock([
-            /* 
-             * Add transactions with: 
-             * Tx.contractCall(...)
-            */
-        ]);
-        assertEquals(block.receipts.length, 0);
-        assertEquals(block.height, 3);
+        console.log(block.receipts)
     },
 });
