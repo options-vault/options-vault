@@ -24,6 +24,8 @@
 (define-constant redstone-stacks-base-diff (/ redstone-value-shift stacks-base))
 
 (define-data-var contract-owner principal tx-sender)
+;; TODO store vault contract OR call function in vault for transfer
+;; (define-data-var vault-contract principal (concat tx-sender))
 (define-data-var token-id-nonce uint u0)
 
 (define-non-fungible-token options-nft uint)
@@ -41,6 +43,7 @@
 (define-data-var last-stxusd-rate (optional uint) none)
 ;; TO DO: needs to be replaced with calculated price for cycle
 (define-data-var price-in-usd (optional uint) none) 
+(define-data-var tx-to-settle-block uint u0)
 
 (define-data-var current-cycle-expiry uint u1665763200) ;; set to Fri Oct 14 2022 16:00:00 GMT+0000
 (define-data-var mint-open bool false)
@@ -67,10 +70,11 @@
 			(end-init-window (- (var-get current-cycle-expiry) (* u180 min-in-seconds)))
 			(init-window-active (and (> timestamp start-init-window) (< timestamp end-init-window)))
 			(current-cycle-expired (> timestamp (var-get current-cycle-expiry)))
+			(cycle-settled (> block-height (var-get tx-to-settle-block)))
 		)
 		;; Check if the signer is a trusted oracle.
 		(asserts! (is-trusted-oracle signer) err-untrusted-oracle)
-		;; Check if the data is not stale, depending on how the app is designed.
+		;; Check if the data is not stale, d(define-data-var tx-to-settle-block uint u0)epending on how the app is designed.
 		(asserts! (> timestamp (get-last-block-timestamp)) err-stale-rate) ;; timestamp should be larger than the last block timestamp.
 		(asserts! (>= timestamp (var-get last-seen-timestamp)) err-stale-rate) ;; timestamp should be larger than or equal to the last seen timestamp.
 		;; Save last seen stxusd price
@@ -80,11 +84,15 @@
 		;; check if timestamp > start and timestamp < end of initialization time range
 		(if init-window-active
 		 (unwrap! (initialize-next-cycle timestamp) err-cycle-initialization)
-		 (unwrap! (ok true) err-cycle-initialization)
+		 true
 		)
 		(if current-cycle-expired 
 			(unwrap! (end-cycle) err-cycle-end)
-			(unwrap! (ok true) err-cycle-end)
+			true
+		)
+		(if cycle-settled
+			(try! (contract-call? .vault distributor))
+			true
 		)
 		(ok true)
 	)
@@ -96,11 +104,11 @@
 	(let 
 		(
 			(stxusd-rate (unwrap-panic (var-get last-stxusd-rate)))
-			(strike (/ (* stxusd-rate u115) u100))
+			(strike (/ (* stxusd-rate u115) u100)) ;; simplified version
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-seconds))
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
 		)
-		(map-set options-info { expiry-timestamp: next-cycle-expiry } 
+		(map-set options-info { expiry-timestamp: next-cycle-expiry } ;; possibly rename to batch-info
 			{ 
 			strike: strike, 
 			first-token-id: first-token-id, 
@@ -116,6 +124,7 @@
 		(ok true) 
 	)
 )
+
 
 (define-private (end-cycle)
 	(let
@@ -144,16 +153,21 @@
 	  	(settlement-options-info (try! (get-options-info settlement-expiry)))
     	(strike (get strike settlement-options-info))
 			(options-minted-amount (- (get first-token-id settlement-options-info) (get last-token-id settlement-options-info)))
+			(total-pnl (* (- strike stxusd-rate) options-minted-amount))
 		)
 		(if (> strike stxusd-rate) 
 			;; option is in-the-money and the pnl is positive
 			;; TODO: Add transfer of funds from vault to settlement --> creaet pool of money for payouts (set aside)
-			(map-set options-info 
-				{ expiry-timestamp: settlement-expiry } 
-				(merge
-					settlement-options-info
-					{ option-pnl: (some (- strike stxusd-rate)), total-pnl: (some (* (- strike stxusd-rate) options-minted-amount)) }
+			(begin
+				(map-set options-info 
+					{ expiry-timestamp: settlement-expiry } 
+					(merge
+						settlement-options-info
+						{ option-pnl: (some (- strike stxusd-rate)), total-pnl: (some total-pnl) }
+					)
 				)
+			(try! (contract-call? .vault transfer-for-settlement total-pnl (as-contract tx-sender)))
+			(var-set tx-to-settle-block block-height)
 			)
 			;; option is out-of-the-money and the pnl is zero
 			(map-set options-info 
@@ -173,7 +187,7 @@
 	;; The price is determined using a simplified calculation that sets options price as 0.5% of the stxusd price.
 	;; If all 52 weekly options for a year would expiry worthless, a uncompounded 26% APY would be achieved by this pricing strategy.
 	;; In the next iteration we intend to replace this simplified calculation with the Black Scholes formula - the industry standard for pricing European style options. 
-	(var-set price-in-usd (some (/ stxusd-rate u200)))
+	(var-set price-in-usd (some (/ stxusd-rate u200))) ;; TODO Alternative name: premium-price-in-usd
 )
 
 ;; NFT MINTING (Priced in USD, payed in STX)
@@ -201,7 +215,7 @@
 		;; Check if mint function is being called in the auction window of start + 25 blocks
 		(asserts! 
 			(and
-				(>= timestamp (var-get auction-start-timestamp))
+				(>= timestamp (var-get auction-start-timestamp)) ;; always true / reduandant
 				;; Check if auciton has run for more than 180 minutes or end-cycle has closed the auction
 				;; Having both checks ensures that (a) the auction never runs longer than 3 hours thus reducing delta risk
 				;; (i.e. the risk of a unfavorable change in the price of the underlying asset) and (b) allows the end-current-cycle
@@ -213,13 +227,14 @@
 			) 
 			err-no-active-auction
 		)
-		;; Update the mint price based on where in the 25 block minting window we are 
+		;; Update the mint price based on where in the 180 min minting window we are 
 		(update-price-in-usd timestamp)
 		;; Update the token ID nonce
 		(var-set token-id-nonce token-id)
 		;; Send the STX equivalent to the contract owner
 		;; TO DO: send STX to vault contract instead of contract-owner
-		(try! (stx-transfer? (try! (get-update-latest-price-in-stx timestamp stxusd-rate)) tx-sender (var-get contract-owner)))
+		(try! (contract-call? .vault deposit-premium (try! (get-update-latest-price-in-stx timestamp stxusd-rate)) tx-sender))
+		;; (try! (stx-transfer? (try! (get-update-latest-price-in-stx timestamp stxusd-rate)) tx-sender (var-get contract-owner)))
 		;; Mint the NFT
 		(try! (nft-mint? options-nft token-id tx-sender))
 		;; Add the token-id of the minted NFT as the last-token-id in the options-info map
@@ -237,7 +252,7 @@
 (define-private (update-price-in-usd (timestamp uint)) 
 	(let
 		(
-			(decrement (* (mod (- timestamp (var-get auction-start-timestamp)) (* min-in-seconds u60)) (var-get auction-decrement-value)))
+			(decrement (* (mod (- timestamp (var-get auction-start-timestamp)) (* min-in-seconds u30)) (var-get auction-decrement-value)))
 		)
 		(var-set price-in-usd (some (- (unwrap-panic (var-get price-in-usd)) decrement)))
 	)
@@ -246,7 +261,7 @@
 ;; SETTLEMENT
 
 ;; #[allow(unchecked_data)] 
-(define-public (settle (token-id uint) (timestamp uint) (stxusd-rate uint) (signature (buff 65))) 
+(define-public (settle (token-id uint) (timestamp uint) (stxusd-rate uint) (signature (buff 65))) ;; claim
   (let
     (
       (signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
@@ -265,6 +280,7 @@
 		(asserts! (> timestamp token-expiry) err-option-not-expired) 
 		(match option-pnl
 			payout
+			;; check that the option-pnl is great than zero
 			(begin
 				;; Transfer options NFT to settlement contract
 				(try! (transfer token-id tx-sender (as-contract tx-sender)))
@@ -285,7 +301,7 @@
 	(begin
 		(if 
 			(and 
-				(<= (get last-token-id current-list-element) (get token-id prev-value))
+				(<= (get token-id prev-value) (get last-token-id current-list-element))
 				(not (get found prev-value))
 			) 
 			{ timestamp: (get expiry-timestamp current-list-element), token-id: (get token-id prev-value), found: true }
@@ -293,8 +309,6 @@
 		)
 	)
 )
-
-
 
 ;; NFT HELPER FUNCTOINS
 
