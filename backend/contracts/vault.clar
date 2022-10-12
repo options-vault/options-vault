@@ -11,6 +11,8 @@
 (define-constant INSUFFICIENT_FUNDS (err u102))
 (define-constant TX_SENDER_NOT_IN_LEDGER (err u103))
 (define-constant ONLY_CONTRACT_ALLOWED (err u104))
+(define-constant HAS_TO_WAIT_UNTIL_NEXT_BLOCK (err u105))
+(define-constant TX_NOT_APPLIED_YET (err u106))
 
 ;; data maps and vars
 
@@ -21,7 +23,7 @@
 
 (define-data-var total-balances uint u0)
 
-(define-data-var premium-balance uint u0)
+(define-data-var tx-to-settle-block uint u0)
 
 ;; private functions
 
@@ -108,12 +110,11 @@
 
 ;; 2. deposit function as premium (vault)
 
-(define-public (deposit-premium (amount uint)) 
+(define-public (deposit-premium (amount uint) (original-sender principal)) 
   (begin
     (asserts! (> amount u0) INVALID_AMOUNT)
-    (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
-    (try! (stx-transfer? amount tx-sender CONTRACT_ADDRESS))
-    (var-set premium-balance (+ (var-get premium-balance) amount))
+    (asserts! (not (is-eq original-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
+    (try! (stx-transfer? amount original-sender CONTRACT_ADDRESS))
     (ok true)
   )
 )
@@ -199,36 +200,37 @@
 
 (define-private (evaluator (investor principal)) 
   (let  (
-          (vault-balance (var-get total-balances))
-          (premium-total (var-get premium-balance))
+          (total-balance (var-get total-balances))
+          (vault-balance (stx-get-balance CONTRACT_ADDRESS)) 
           (investor-info (unwrap-panic (map-get? ledger investor)))
           (investor-balance (get balance investor-info))
-          (premium-slice (/ (* (/ (* investor-balance u100) vault-balance) premium-total) u100))
         )
-        (if (> premium-slice u0) 
-          (begin 
-            (try! (as-contract (stx-transfer? premium-slice tx-sender investor)))
-            (map-set ledger
-              investor
-              (merge 
-                investor-info
-                {
-                  balance: 
-                    (+  premium-slice investor-balance)
-                }
-              )
-            )
+        (map-set ledger
+          investor
+          (merge 
+            investor-info
+            {
+              balance: 
+                (/ (* investor-balance vault-balance) total-balance)
+            }
           )
-          true
-        ) 
-        
-        (ok true)
+        )
   )
 )
 
 (define-public (distributor)
   (begin
     ;; (asserts! (is-eq CONTRACT_ADDRESS tx-sender) ONLY_CONTRACT_ALLOWED)
+    (asserts! (> (var-get tx-to-settle-block) block-height) HAS_TO_WAIT_UNTIL_NEXT_BLOCK)
+    ;; assert that balance at tx-to-settle-block is not equal to balance block-height (now)
+    ;; to handle edge cas where the settlement transaction was broadcast but was not mined in the first block
+    (asserts! 
+      (not (is-eq 
+        (stx-get-balance CONTRACT_ADDRESS)
+        (at-block (unwrap-panic (get-block-info? id-header-hash (var-get tx-to-settle-block))) (stx-get-balance CONTRACT_ADDRESS))
+      ))
+      TX_NOT_APPLIED_YET
+    )
     (map evaluator (var-get investors-address))
     (ok true)
   )
@@ -241,4 +243,15 @@
 
 (define-read-only (get-investors-list) 
   (var-get investors-address)
+)
+
+;; TX to sttlement contract what is owed to users2 type
+;; #[allow(unchecked_data)]
+(define-public (transfer-for-settlement (amount uint) (settlement-contract principal))
+  (begin
+    (asserts! (> amount u0) INVALID_AMOUNT)
+    (var-set tx-to-settle-block block-height)
+    (try! (as-contract (stx-transfer? amount tx-sender settlement-contract)))
+    (ok true)
+  )
 )
