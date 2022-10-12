@@ -9,9 +9,6 @@ export type PricePackage = {
 	timestamp: number
 };
 
-// One day Clarinet may be able to import actual project source files so we
-// can stop repeating code.
-
 export function shiftPriceValue(value: number) {
 	return Math.round(value * (10 ** 8))
 }
