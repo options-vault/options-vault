@@ -36,7 +36,7 @@ export function pricePackageToCV(pricePackage: PricePackage) {
 }
 
  export function liteSignatureToStacksSignature(liteSignature:string) {
-	let bytes = hexToByte(liteSignature)
+	let bytes = hexToBytes(liteSignature)
 	bytes = bytes.slice(1, bytes.length)
 	if (bytes.length !== 65)
 		throw new Error(`Invalid liteSignature, expected 65 bytes got ${bytes.length}`);
@@ -52,20 +52,3 @@ function hexToBytes(hex: string) {
     return bytes;
 }
 
-function hexToByte(hex: string) {
-	const key = hex
-	let newBytes = []
-	let currentChar = 0
-	let currentByte = 0
-	for (let i=0; i<hex.length; i++) {   // Go over two 4-bit hex chars to convert into one 8-bit byte
-	  currentChar = key.indexOf(hex[i])
-	  if (i%2===0) { // First hex char
-		currentByte = (currentChar << 4) // Get 4-bits from first hex char
-	  }
-	  if (i%2===1) { // Second hex char
-		currentByte += (currentChar)     // Concat 4-bits from second hex char
-		newBytes.push(currentByte)       // Add byte
-	  }
-	}
-	return new Uint8Array(newBytes)
-  }
