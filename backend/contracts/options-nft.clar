@@ -34,7 +34,8 @@
 
 ;; A map that holds the strike price for each contract and assigns token-ids to expiry
 (define-map options-info { expiry-timestamp: uint } { strike: uint, first-token-id: uint, last-token-id: uint, option-pnl: (optional uint), total-pnl: (optional uint) })
-
+;; A list that holds a tuple with the expiry-timestamp and the last-token-id minted for that expiry
+(define-data-var options-info-list (list 1000 { expiry-timestamp: uint, last-token-id: uint }) (list))
 ;; Last seen timestamp. The if clause is so that the contract can deploy on a Clarinet console session.
 (define-data-var last-seen-timestamp uint (if (> block-height u0) (get-last-block-timestamp) u0))
 (define-data-var last-stxusd-rate (optional uint) none)
@@ -117,12 +118,22 @@
 )
 
 (define-private (end-cycle)
-	(begin 
+	(let
+		(
+			(expired-cycle-expiry (var-get current-cycle-expiry))
+			(last-token-id (var-get token-id-nonce))
+			(cycle-tuple { expiry-timestamp: expired-cycle-expiry, last-token-id: last-token-id })
+		) 
 		(var-set mint-open false)
 		(asserts! (unwrap-panic (determine-and-set-value)) err-determine-value)
-		(var-set current-cycle-expiry (+ (var-get current-cycle-expiry) week-in-seconds))
+		(add-to-options-info-list cycle-tuple)
+		(var-set current-cycle-expiry (+ expired-cycle-expiry week-in-seconds))
 		(ok true)
 	) 
+)
+
+(define-private (add-to-options-info-list (cycle-tuple { expiry-timestamp: uint, last-token-id: uint}))
+  (var-set options-info-list (unwrap-panic (as-max-len? (append (var-get options-info-list) cycle-tuple) u1000)))
 )
 
 (define-private (determine-and-set-value)
@@ -136,6 +147,7 @@
 		)
 		(if (> strike stxusd-rate) 
 			;; option is in-the-money and the pnl is positive
+			;; TODO: Add transfer of funds from vault to settlement --> creaet pool of money for payouts (set aside)
 			(map-set options-info 
 				{ expiry-timestamp: settlement-expiry } 
 				(merge
@@ -205,7 +217,8 @@
 		(update-price-in-usd timestamp)
 		;; Update the token ID nonce
 		(var-set token-id-nonce token-id)
-		;; Send the STX equivalent to the contract owner. TO DO: send STX to vault contract instead of contract-owner
+		;; Send the STX equivalent to the contract owner
+		;; TO DO: send STX to vault contract instead of contract-owner
 		(try! (stx-transfer? (try! (get-update-latest-price-in-stx timestamp stxusd-rate)) tx-sender (var-get contract-owner)))
 		;; Mint the NFT
 		(try! (nft-mint? options-nft token-id tx-sender))
@@ -232,52 +245,53 @@
 
 ;; SETTLEMENT
 
-;; TODO: need ability to map token-id to an expiry-timestamp
-;; --> need a list that holds tuples with { expiry-timestamp: uint, last-token-id: uint }
-;; Tuple is appended to the list in end-cycle method
-;; in settle we call find-expiry which iterates over the list to find the matching expiry-timestamp  
-
 ;; #[allow(unchecked_data)] 
 (define-public (settle (token-id uint) (timestamp uint) (stxusd-rate uint) (signature (buff 65))) 
   (let
     (
-      ;; Recover the pubkey of the signer
       (signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
-			(settlement-expiry (- (var-get current-cycle-expiry) week-in-seconds))
-      (settlement-options-info (try! (get-options-info settlement-expiry)))
-      (strike (get strike settlement-options-info)) 
-      (first-token-id (get first-token-id settlement-options-info)) 
-      (last-token-id (get last-token-id settlement-options-info)) 
-			(options-minted-amount (- last-token-id first-token-id))
-			;; (options-pnl ())
+			(token-expiry (get timestamp (find-expiry token-id)))
+			(settlement-options-info (try! (get-options-info token-expiry)))
+			(option-pnl (get option-pnl settlement-options-info))
+			(first-token-id (get first-token-id settlement-options-info)) 
+			(last-token-id (get last-token-id settlement-options-info))
     ) 
 		;; Check if the signer is a trusted oracle
     (asserts! (is-trusted-oracle signer) err-untrusted-oracle)
 		;; Check if provided token-id is in the range for the expiry
 		(asserts! (and (>= token-id first-token-id) (<= token-id last-token-id)) err-token-id-not-in-expiry-range)
 		;; TODO: Change to checking if option-pnl has been set or is none
-		
 		;; Check if options is expired
-		(asserts! (> timestamp settlement-expiry) err-option-not-expired) 
-    
-		;; Check if options-pnl none
-			;; if none: 
-				;; call determine-value 
-				;; set option-pnl and total-cycle-pnl in options-info
-				;; 
-			;; if uint: do nothing
-
-		
-		;; Transfer options NFT to settlement contract
-    (try! (transfer token-id tx-sender (as-contract tx-sender)))
-
-
-    ;; TO DO: 
-    ;; retrieve and store value of nft at expiry --> call determine-value passing expiry
-    ;; if value positive: transfer stx to tx-sender
-    (ok true)
+		(asserts! (> timestamp token-expiry) err-option-not-expired) 
+		(match option-pnl
+			payout
+			(begin
+				;; Transfer options NFT to settlement contract
+				(try! (transfer token-id tx-sender (as-contract tx-sender)))
+				;; Transfer STX to tx-sender
+				(try! (stx-transfer? (unwrap-panic option-pnl) (as-contract tx-sender) tx-sender))
+				(ok true)
+			)
+			err-option-not-expired
+		)
   )
-  ;; TODO: When first called for an expiry AND expiry in the past AND in-the-money, creaet pool of money for payouts (set aside)
+)
+
+(define-private (find-expiry (token-id uint)) 
+	(fold find-expiry-helper (var-get options-info-list) {timestamp: u0, token-id: token-id, found: false})
+)
+
+(define-private (find-expiry-helper (current-list-element { expiry-timestamp: uint, last-token-id: uint }) (prev-value { timestamp: uint, token-id: uint, found: bool }) ) 
+	(begin
+		(if 
+			(and 
+				(<= (get last-token-id current-list-element) (get token-id prev-value))
+				(not (get found prev-value))
+			) 
+			{ timestamp: (get expiry-timestamp current-list-element), token-id: (get token-id prev-value), found: true }
+			prev-value
+		)
+	)
 )
 
 
