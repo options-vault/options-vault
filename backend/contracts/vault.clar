@@ -10,6 +10,7 @@
 (define-constant VAULT_NOT_ALLOWED (err u101))
 (define-constant INSUFFICIENT_FUNDS (err u102))
 (define-constant TX_SENDER_NOT_IN_LEDGER (err u103))
+(define-constant ONLY_CONTRACT_ALLOWED (err u104))
 
 ;; data maps and vars
 
@@ -19,6 +20,8 @@
 (define-data-var investors-address (list 1000 principal) (list))
 
 (define-data-var total-balances uint u0)
+
+(define-data-var premium-balance uint u0)
 
 ;; private functions
 
@@ -110,6 +113,7 @@
     (asserts! (> amount u0) INVALID_AMOUNT)
     (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
     (try! (stx-transfer? amount tx-sender CONTRACT_ADDRESS))
+    (var-set premium-balance (+ (var-get premium-balance) amount))
     (ok true)
   )
 )
@@ -196,28 +200,35 @@
 (define-private (evaluator (investor principal)) 
   (let  (
           (vault-balance (var-get total-balances))
-          (premium-balance (- (stx-get-balance CONTRACT_ADDRESS) vault-balance))
+          (premium-total (var-get premium-balance))
           (investor-info (unwrap-panic (map-get? ledger investor)))
           (investor-balance (get balance investor-info))
-          (premium-slice (* (/ investor-balance vault-balance) premium-balance))
+          (premium-slice (/ (* (/ (* investor-balance u100) vault-balance) premium-total) u100))
         )
-        (try! (as-contract (stx-transfer? premium-slice tx-sender investor)))
-        (map-set ledger
-          investor
-          (merge 
-            investor-info
-            {
-              balance: 
-                (+  premium-slice investor-balance)
-            }
+        (if (> premium-slice u0) 
+          (begin 
+            (try! (as-contract (stx-transfer? premium-slice tx-sender investor)))
+            (map-set ledger
+              investor
+              (merge 
+                investor-info
+                {
+                  balance: 
+                    (+  premium-slice investor-balance)
+                }
+              )
+            )
           )
-        )
-        (ok "PREMIUM SLICE ADDED TO BALANCE")
+          true
+        ) 
+        
+        (ok true)
   )
 )
 
 (define-public (distributor)
-  (begin 
+  (begin
+    ;; (asserts! (is-eq CONTRACT_ADDRESS tx-sender) ONLY_CONTRACT_ALLOWED)
     (map evaluator (var-get investors-address))
     (ok true)
   )
