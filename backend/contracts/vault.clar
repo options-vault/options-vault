@@ -248,7 +248,7 @@
 
 ;; TX to sttlement contract what is owed to users2 type
 ;; #[allow(unchecked_data)]
-(define-public (transfer-for-settlement (amount uint) (settlement-contract principal))
+(define-public (create-settlement-pool (amount uint) (settlement-contract principal))
   (begin
     (asserts! (> amount u0) INVALID_AMOUNT)
     (var-set block-height-settlement block-height)

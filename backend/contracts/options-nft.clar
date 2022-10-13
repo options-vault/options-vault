@@ -38,7 +38,7 @@
 (define-data-var current-cycle-expiry uint u1665763200) ;; set to Fri Oct 14 2022 16:00:00 GMT+0000
 ;; A map that holds the relevant data points for each batch of options issued by the contract
 ;; TODO: Rename to options-batch-info or batch-info
-;; TODO: remove total-pnl
+;; TODO: Remove total-pnl (can be computed from remaining data points)
 ;; TODO: Add price-in-usd? Since auction can have multiple prices do we need to store start and end price, average price? (NOTE: all transactions can be viewed and analyzed on chain)
 (define-map options-info { cycle-expiry: uint } { strike: uint, first-token-id: uint, last-token-id: uint, option-pnl: (optional uint), total-pnl: (optional uint) }) 
 ;; A list that holds a tuple with the cycle-expiry and the last-token-id minted for that expiry
@@ -62,7 +62,7 @@
 
 ;; FUNCTION TO RECEIVE & VALIDATE PRICE DATA FROM REDSTONE SERVER + CONTROL CENTER FUNCTION 
 
-;; TODO: implement helper functiont that abstracts away recover-signer contract call and is-trusted-oracle assert 
+;; TODO: implement helper function that abstracts away recover-signer contract call and is-trusted-oracle assert 
 ;; #[allow(unchecked_data)]
 (define-public (submit-price-data (timestamp uint) (stxusd-rate uint) (signature (buff 65)))
 	(let 
@@ -107,7 +107,7 @@
 			(cycle-tuple { cycle-expiry: (var-get current-cycle-expiry), last-token-id: last-token-id })
 		) 
 		(var-set auction-open false)
-		(try! (determine-and-set-value))
+		(try! (determine-value-and-settle))
 		(add-to-options-info-list cycle-tuple)
 		(ok true)
 	) 
@@ -148,7 +148,7 @@
   (var-set options-info-list (unwrap-panic (as-max-len? (append (var-get options-info-list) cycle-tuple) u1000)))
 )
 
-(define-private (determine-and-set-value)
+(define-private (determine-value-and-settle)
 	(let
 		(
 			(stxusd-rate (unwrap-panic (var-get last-stxusd-rate)))
@@ -170,8 +170,8 @@
 						}
 					)
 				)
-			;; Send 
-			(try! (contract-call? .vault transfer-for-settlement (* (- strike stxusd-rate) options-minted-amount) (as-contract tx-sender))) ;; TODO: Convert amount to STX
+			;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
+			(try! (contract-call? .vault create-settlement-pool (* (- strike stxusd-rate) options-minted-amount) (as-contract tx-sender))) ;; TODO: Convert amount to STX
 			)
 			;; option is out-of-the-money, pnl is zero
 			(map-set options-info 
@@ -275,7 +275,7 @@
 ;; SETTLEMENT
 
 ;; #[allow(unchecked_data)] 
-(define-public (settle (token-id uint) (timestamp uint) (stxusd-rate uint) (signature (buff 65))) ;; claim
+(define-public (claim-options-value (token-id uint) (timestamp uint) (stxusd-rate uint) (signature (buff 65))) ;; claim
   (let
     (
       (signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
