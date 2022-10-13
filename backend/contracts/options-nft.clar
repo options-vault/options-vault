@@ -11,7 +11,7 @@
 (define-constant ERR_NOT_TOKEN_OWNER (err u104))
 (define-constant ERR_OPTION_NOT_EXPIRED (err u105))
 (define-constant ERR_NO_INFO_FOR_EXPIRY (err u106))
-(define-constant ERR_CYCLE_INIT (err u107))
+(define-constant ERR_CYCLE_INIT_FAILED (err u107))
 (define-constant ERR_AUCTION_CLOSED (err u108))
 (define-constant ERR_OPTIONS_SOLD_OUT (err u109))
 (define-constant ERR_TOKEN_ID_NOT_IN_EXPIRY_RANGE (err u110)) ;; TODO: Still needed?
@@ -65,30 +65,28 @@
 		(
 			;; Recover the pubkey of the signer.
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
-			(start-init-window (- (var-get current-cycle-expiry) (* u190 min-in-seconds)))
-			(end-init-window (- (var-get current-cycle-expiry) (* u180 min-in-seconds)))
-			(init-window-active (and (> timestamp start-init-window) (< timestamp end-init-window)))
 			(current-cycle-expired (> timestamp (var-get current-cycle-expiry)))
 			(cycle-settled (> block-height (var-get block-height-settlement)))
 		)
 		;; Check if the signer is a trusted oracle.
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
-		;; Check if the data is not stale, d(define-data-var block-height-settlement uint u0)epending on how the app is designed.
+		;; Check if the data is not stale, depending on how the app is designed.
 		(asserts! (> timestamp (get-last-block-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than the last block timestamp.
 		(asserts! (>= timestamp (var-get last-seen-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than or equal to the last seen timestamp.
 		;; Save last seen stxusd price
 		(var-set last-stxusd-rate (some stxusd-rate))
 		;; Save last seen timestamp.
 		(var-set last-seen-timestamp timestamp)		
-		;; check if timestamp > start and timestamp < end of initialization time range
-		(if init-window-active
-		 (unwrap! (initialize-next-cycle timestamp) ERR_CYCLE_INIT)
-		 true
-		)
+
 		(if current-cycle-expired 
-			(try! (end-cycle))
+			(begin
+				(try! (end-current-cycle))
+				(unwrap! (init-next-cycle) ERR_CYCLE_INIT_FAILED) 
+				;; TODO: Why can't I use try! here instead of unwrap!?
+			)
 			true
 		)
+
 		(if cycle-settled
 			(try! (contract-call? .vault distributor))
 			true
@@ -99,11 +97,11 @@
 
 ;; INITIALIZE NEXT CYCLE
 
-(define-private (initialize-next-cycle (timestamp uint)) 
+(define-private (init-next-cycle) 
 	(let 
 		(
 			(stxusd-rate (unwrap-panic (var-get last-stxusd-rate)))
-			(strike (/ (* stxusd-rate u115) u100)) ;; simplified version
+			(strike (/ (* stxusd-rate u115) u100)) ;; simplified version --> TODO: Make private helper function
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-seconds))
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
 		)
@@ -118,24 +116,23 @@
 		)
 		(set-options-price stxusd-rate)
 		(var-set mint-open true)
-		(var-set auction-start-time timestamp)
+		(var-set auction-start-time (var-get current-cycle-expiry))
 		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
+		(var-set current-cycle-expiry next-cycle-expiry)
 		(ok true) 
 	)
 )
 
 
-(define-private (end-cycle)
+(define-private (end-current-cycle)
 	(let
 		(
-			(expired-cycle-expiry (var-get current-cycle-expiry))
 			(last-token-id (var-get token-id-nonce))
-			(cycle-tuple { cycle-expiry: expired-cycle-expiry, last-token-id: last-token-id })
+			(cycle-tuple { cycle-expiry: (var-get current-cycle-expiry), last-token-id: last-token-id })
 		) 
 		(var-set mint-open false)
 		(try! (determine-and-set-value))
 		(add-to-options-info-list cycle-tuple)
-		(var-set current-cycle-expiry (+ expired-cycle-expiry week-in-seconds))
 		(ok true)
 	) 
 )
@@ -186,7 +183,7 @@
 	;; The price is determined using a simplified calculation that sets options price as 0.5% of the stxusd price.
 	;; If all 52 weekly options for a year would expiry worthless, a uncompounded 26% APY would be achieved by this pricing strategy.
 	;; In the next iteration we intend to replace this simplified calculation with the Black Scholes formula - the industry standard for pricing European style options. 
-	(var-set options-price-in-usd (some (/ stxusd-rate u200))) ;; TODO Alternative name: premium-options-price-in-usd
+	(var-set options-price-in-usd (some (/ stxusd-rate u200)))
 )
 
 ;; NFT MINTING (Priced in USD, payed in STX)
@@ -215,7 +212,7 @@
 		(asserts! 
 			(and
 				(>= timestamp (var-get auction-start-time)) ;; always true / reduandant
-				;; Check if auciton has run for more than 180 minutes or end-cycle has closed the auction
+				;; Check if auciton has run for more than 180 minutes or end-current-cycle has closed the auction
 				;; Having both checks ensures that (a) the auction never runs longer than 3 hours thus reducing delta risk
 				;; (i.e. the risk of a unfavorable change in the price of the underlying asset) and (b) allows the end-current-cycle
 				;; function to close the auction "manually" to ensure a safe transition the next cycle
