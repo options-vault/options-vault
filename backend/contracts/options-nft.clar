@@ -138,7 +138,7 @@
 (define-private (init-next-cycle) 
 	(let 
 		(
-			(stxusd-rate (unwrap-panic (var-get last-stxusd-rate)))
+			(stxusd-rate (unwrap! (var-get last-stxusd-rate) (err u7)))
 			(strike (calculate-strike stxusd-rate)) ;; simplified calculation for mvp scope
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-seconds))
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
@@ -179,9 +179,9 @@
 		(
 			(stxusd-rate (unwrap-panic (var-get last-stxusd-rate)))
 			(settlement-expiry (var-get current-cycle-expiry))
-	  	(settlement-options-ledger (try! (get-options-ledger settlement-expiry)))
-    	(strike (get strike settlement-options-ledger))
-			(options-minted-amount (- (get first-token-id settlement-options-ledger) (get last-token-id settlement-options-ledger)))
+	  	(settlement-options-ledger-entry (try! (get-options-ledger-entry settlement-expiry)))
+    	(strike (get strike settlement-options-ledger-entry))
+			(options-minted-amount (- (get first-token-id settlement-options-ledger-entry) (get last-token-id settlement-options-ledger-entry)))
 		)
 		(if (> strike stxusd-rate) 
 			;; Option is in-the-money, pnl is positive
@@ -189,7 +189,7 @@
 				(map-set options-ledger 
 					{ cycle-expiry: settlement-expiry } 
 					(merge
-						settlement-options-ledger
+						settlement-options-ledger-entry
 						{ 
 							option-pnl: (some (- strike stxusd-rate)), ;; TODO: Convert amount to STX
 							total-pnl: (some (* (- strike stxusd-rate) options-minted-amount)) ;; TODO: Convert amount to STX
@@ -203,7 +203,7 @@
 			(map-set options-ledger 
 				{ cycle-expiry: settlement-expiry } 
 				(merge
-					settlement-options-ledger
+					settlement-options-ledger-entry
 					{ 
 						option-pnl: (some u0), 
 						total-pnl: (some u0) 
@@ -241,7 +241,7 @@
 			;; Recover the pubkey of the signer.
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
 			(token-id (+ (var-get token-id-nonce) u1))
-      (current-cycle-options-ledger (try! (get-options-ledger (var-get current-cycle-expiry))))
+      (current-cycle-options-ledger-entry (try! (get-options-ledger-entry (var-get current-cycle-expiry))))
 		)
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
 		;; Check if options-nft are available for sale. The contract can only sell as many options-nfts as there are funds in the vault
@@ -257,11 +257,11 @@
 		(try! (contract-call? .vault deposit-premium (try! (get-update-latest-price-in-stx timestamp stxusd-rate)) tx-sender))
 		;; Mint the NFT
 		(try! (nft-mint? options-nft token-id tx-sender))
-		;; Add the token-id of the minted NFT as the last-token-id to the options-ledger map
+		;; Update last-token-id in the options-ledger with the token-id of the minted NFT
 		(map-set options-ledger 
 			{ cycle-expiry: (var-get current-cycle-expiry) } 
 			(merge
-				current-cycle-options-ledger
+				current-cycle-options-ledger-entry
 				{ last-token-id: token-id }
 			)
 		)
@@ -284,20 +284,22 @@
 (define-public (claim (token-id uint) (timestamp uint) (stxusd-rate uint) (signature (buff 65))) ;; claim
   (let
     (
-      (signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
+      (recipient tx-sender)
+			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
 			(token-expiry (get timestamp (find-expiry token-id)))
-			(settlement-options-ledger (try! (get-options-ledger token-expiry)))
-			(option-pnl (get option-pnl settlement-options-ledger))
-			(first-token-id (get first-token-id settlement-options-ledger)) 
-			(last-token-id (get last-token-id settlement-options-ledger))
+			(settlement-options-ledger-entry (try! (get-options-ledger-entry token-expiry)))
+			(option-pnl (get option-pnl settlement-options-ledger-entry))
+			(first-token-id (get first-token-id settlement-options-ledger-entry)) 
+			(last-token-id (get last-token-id settlement-options-ledger-entry))
+
     ) 
 		;; Check if the signer is a trusted oracle
     (asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
 		;; Check if provided token-id is in the range for the expiry
 		(asserts! (and (>= token-id first-token-id) (<= token-id last-token-id)) ERR_TOKEN_ID_NOT_IN_EXPIRY_RANGE)
-		;; TODO: ;; TODO: Still needed? Change to checking if option-pnl has been set or is none
 		;; Check if options is expired
 		(asserts! (> timestamp token-expiry) ERR_OPTION_NOT_EXPIRED) 
+		
 		(match option-pnl
 			payout
 			;; check that the option-pnl is great than zero
@@ -305,7 +307,7 @@
 				;; Transfer options NFT to settlement contract
 				(try! (transfer token-id tx-sender (as-contract tx-sender)))
 				;; Transfer STX to tx-sender
-				(try! (stx-transfer? (unwrap-panic option-pnl) (as-contract tx-sender) tx-sender))
+				(try! (as-contract (stx-transfer? (unwrap-panic option-pnl) tx-sender recipient)))
 				(ok true)
 			)
 			ERR_OPTION_NOT_EXPIRED
@@ -356,14 +358,11 @@
 	)
 )
 
-(define-private (get-options-ledger (cycle-expiry uint)) 
+(define-private (get-options-ledger-entry (cycle-expiry uint)) 
   (ok (unwrap! (map-get? options-ledger {cycle-expiry: cycle-expiry}) ERR_NO_INFO_FOR_EXPIRY))
 )
 
-(define-private (get-options-pnl (cycle-expiry uint)) 
-	(ok true)
-	;; TODO implement functions, that checks for none value and returns error
-)
+
 ;; CONTRACT OWNERSHIP HELPER FUNCTIONS
 
 (define-public (set-contract-owner (new-owner principal))

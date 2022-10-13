@@ -119,6 +119,7 @@
   )
 )
 
+;; TODO: Send deposited funds to vault contract
 (define-public (queue-deposit (amount uint)) 
   (begin
     (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
