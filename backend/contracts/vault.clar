@@ -219,7 +219,7 @@
   )
 )
 
-(define-public (distributor)
+(define-public (distribute-pnl)
   (begin
     ;; (asserts! (is-eq CONTRACT_ADDRESS tx-sender) ONLY_CONTRACT_ALLOWED)
     (asserts! (> (var-get block-height-settlement) block-height) HAS_TO_WAIT_UNTIL_NEXT_BLOCK)

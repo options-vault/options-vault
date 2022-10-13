@@ -90,7 +90,7 @@
 		)
 
 		(if settlement-tx-mined
-			(try! (contract-call? .vault distributor))
+			(try! (contract-call? .vault distribute-pnl))
 			true
 		)
 		(ok true)
@@ -155,7 +155,7 @@
 			(options-minted-amount (- (get first-token-id settlement-options-info) (get last-token-id settlement-options-info)))
 		)
 		(if (> strike stxusd-rate) 
-			;; option is in-the-money, pnl is positive
+			;; Option is in-the-money, pnl is positive
 			(begin
 				(map-set options-info 
 					{ cycle-expiry: settlement-expiry } 
@@ -170,7 +170,7 @@
 			;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
 			(try! (contract-call? .vault create-settlement-pool (* (- strike stxusd-rate) options-minted-amount) (as-contract tx-sender))) ;; TODO: Convert amount to STX
 			)
-			;; option is out-of-the-money, pnl is zero
+			;; Option is out-of-the-money, pnl is zero
 			(map-set options-info 
 				{ cycle-expiry: settlement-expiry } 
 				(merge
@@ -212,8 +212,6 @@
 			(token-id (+ (var-get token-id-nonce) u1))
       (current-cycle-options-info (try! (get-options-info (var-get current-cycle-expiry))))
 		)
-		;; Check if the signer is a trusted oracle. If it fails, then the possible price
-		;; update via get-update-latest-price-in-stx is also reverted. This is important.
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
 		;; Check if options-nft are available for sale. The contract can only sell as many options-nfts as there are funds in the vault
 		;; TODO: make sure the decimals between balances in the vault and options-minted-amount match
