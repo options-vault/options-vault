@@ -39,10 +39,9 @@
 ;; The unix timestamp of the expiry date of the current cycle
 (define-data-var current-cycle-expiry uint u1665763200) ;; set to Fri Oct 14 2022 16:00:00 GMT+0000
 ;; A map that holds the relevant data points for each batch of options issued by the contract
-;; TODO: Rename to options-ledger
 ;; TODO: Remove total-pnl (can be computed from remaining data points)
 ;; TODO: Add price-in-usd? Since auction can have multiple prices do we need to store start and end price, average price? (NOTE: all transactions can be viewed and analyzed on chain)
-(define-map options-info 
+(define-map options-ledger 
 	{ cycle-expiry: uint } 
 	{ 
 		strike: uint, 
@@ -53,7 +52,7 @@
 	}
 ) 
 ;; A list that holds a tuple with the cycle-expiry and the last-token-id minted for that expiry
-(define-data-var options-info-list (list 1000 { cycle-expiry: uint, last-token-id: uint }) (list))
+(define-data-var options-ledger-list (list 1000 { cycle-expiry: uint, last-token-id: uint }) (list))
 
 (define-data-var options-price-in-usd (optional uint) none)
 (define-data-var options-for-sale uint u0)
@@ -125,7 +124,7 @@
 			(cycle-tuple { cycle-expiry: (var-get current-cycle-expiry), last-token-id: last-token-id })
 		) 
 		(try! (determine-value-and-settle))
-		(add-to-options-info-list cycle-tuple)
+		(add-to-options-ledger-list cycle-tuple)
 		(ok true)
 	) 
 )
@@ -147,7 +146,7 @@
 			(now (var-get last-seen-timestamp))
 		)
 
-		(map-set options-info 
+		(map-set options-ledger 
 			{ cycle-expiry: next-cycle-expiry } 
 			{ 
 			strike: strike, 
@@ -171,8 +170,8 @@
 )
 
 ;; TODO: Move to the back of the file
-(define-private (add-to-options-info-list (cycle-tuple { cycle-expiry: uint, last-token-id: uint}))
-  (var-set options-info-list (unwrap-panic (as-max-len? (append (var-get options-info-list) cycle-tuple) u1000)))
+(define-private (add-to-options-ledger-list (cycle-tuple { cycle-expiry: uint, last-token-id: uint}))
+  (var-set options-ledger-list (unwrap-panic (as-max-len? (append (var-get options-ledger-list) cycle-tuple) u1000)))
 )
 
 (define-private (determine-value-and-settle)
@@ -180,17 +179,17 @@
 		(
 			(stxusd-rate (unwrap-panic (var-get last-stxusd-rate)))
 			(settlement-expiry (var-get current-cycle-expiry))
-	  	(settlement-options-info (try! (get-options-info settlement-expiry)))
-    	(strike (get strike settlement-options-info))
-			(options-minted-amount (- (get first-token-id settlement-options-info) (get last-token-id settlement-options-info)))
+	  	(settlement-options-ledger (try! (get-options-ledger settlement-expiry)))
+    	(strike (get strike settlement-options-ledger))
+			(options-minted-amount (- (get first-token-id settlement-options-ledger) (get last-token-id settlement-options-ledger)))
 		)
 		(if (> strike stxusd-rate) 
 			;; Option is in-the-money, pnl is positive
 			(begin
-				(map-set options-info 
+				(map-set options-ledger 
 					{ cycle-expiry: settlement-expiry } 
 					(merge
-						settlement-options-info
+						settlement-options-ledger
 						{ 
 							option-pnl: (some (- strike stxusd-rate)), ;; TODO: Convert amount to STX
 							total-pnl: (some (* (- strike stxusd-rate) options-minted-amount)) ;; TODO: Convert amount to STX
@@ -201,10 +200,10 @@
 			(try! (contract-call? .vault create-settlement-pool (* (- strike stxusd-rate) options-minted-amount) (as-contract tx-sender))) ;; TODO: Convert amount to STX
 			)
 			;; Option is out-of-the-money, pnl is zero
-			(map-set options-info 
+			(map-set options-ledger 
 				{ cycle-expiry: settlement-expiry } 
 				(merge
-					settlement-options-info
+					settlement-options-ledger
 					{ 
 						option-pnl: (some u0), 
 						total-pnl: (some u0) 
@@ -228,6 +227,8 @@
 (define-private (calculate-strike (stxusd-rate uint))
 	;; A simple calculation to set the strike price 15% higher than the current price of the underlying asset
 	;; In the next iteration we intend to replace this simplified calculation with a calculation that thanks more variables (i.e. volatility) into account
+	;; Since the begin of the auction is somewhat variable (there is a small chance that it starts later than normal-start-time) it would help risk-management
+	;; to make the calculate-strike and/or the set-optons-price functions dependent on the time-to-expiry, therefore properly pricing the option's time value
 	(/ (* stxusd-rate u115) u100)
 )
 
@@ -240,28 +241,27 @@
 			;; Recover the pubkey of the signer.
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
 			(token-id (+ (var-get token-id-nonce) u1))
-      (current-cycle-options-info (try! (get-options-info (var-get current-cycle-expiry))))
+      (current-cycle-options-ledger (try! (get-options-ledger (var-get current-cycle-expiry))))
 		)
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
 		;; Check if options-nft are available for sale. The contract can only sell as many options-nfts as there are funds in the vault
 		(asserts! (> (var-get options-for-sale) u0) ERR_OPTIONS_SOLD_OUT)
 		;; Check if auciton has run for more than 180 minutes, this ensures that the auction never runs longer than 3 hours thus reducing delta risk
 		;; (i.e. the risk of a unfavorable change in the price of the underlying asset)
-		;; TODO: Adjust mint window to new excalidraw timeline (NEXT)
 		(asserts! (< timestamp (+ (var-get auction-start-time) (* min-in-seconds u180))) ERR_AUCTION_CLOSED)
 		;; Update the mint price based on where in the 180 min minting window we are 
 		(update-options-price-in-usd timestamp)
 		;; Update the token ID nonce
 		(var-set token-id-nonce token-id)
-		;; Deposit the premium payment in to the vault contract
+		;; Deposit the premium payment into the vault contract
 		(try! (contract-call? .vault deposit-premium (try! (get-update-latest-price-in-stx timestamp stxusd-rate)) tx-sender))
 		;; Mint the NFT
 		(try! (nft-mint? options-nft token-id tx-sender))
-		;; Add the token-id of the minted NFT as the last-token-id in the options-info map
-		(map-set options-info 
+		;; Add the token-id of the minted NFT as the last-token-id to the options-ledger map
+		(map-set options-ledger 
 			{ cycle-expiry: (var-get current-cycle-expiry) } 
 			(merge
-				current-cycle-options-info
+				current-cycle-options-ledger
 				{ last-token-id: token-id }
 			)
 		)
@@ -286,10 +286,10 @@
     (
       (signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
 			(token-expiry (get timestamp (find-expiry token-id)))
-			(settlement-options-info (try! (get-options-info token-expiry)))
-			(option-pnl (get option-pnl settlement-options-info))
-			(first-token-id (get first-token-id settlement-options-info)) 
-			(last-token-id (get last-token-id settlement-options-info))
+			(settlement-options-ledger (try! (get-options-ledger token-expiry)))
+			(option-pnl (get option-pnl settlement-options-ledger))
+			(first-token-id (get first-token-id settlement-options-ledger)) 
+			(last-token-id (get last-token-id settlement-options-ledger))
     ) 
 		;; Check if the signer is a trusted oracle
     (asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
@@ -314,7 +314,7 @@
 )
 
 (define-private (find-expiry (token-id uint)) 
-	(fold find-expiry-helper (var-get options-info-list) { timestamp: u0, token-id: token-id, found: false })
+	(fold find-expiry-helper (var-get options-ledger-list) { timestamp: u0, token-id: token-id, found: false })
 )
 
 (define-private (find-expiry-helper (current-element { cycle-expiry: uint, last-token-id: uint }) (prev-value { timestamp: uint, token-id: uint, found: bool }) ) 
@@ -356,8 +356,8 @@
 	)
 )
 
-(define-private (get-options-info (cycle-expiry uint)) 
-  (ok (unwrap! (map-get? options-info {cycle-expiry: cycle-expiry}) ERR_NO_INFO_FOR_EXPIRY))
+(define-private (get-options-ledger (cycle-expiry uint)) 
+  (ok (unwrap! (map-get? options-ledger {cycle-expiry: cycle-expiry}) ERR_NO_INFO_FOR_EXPIRY))
 )
 
 (define-private (get-options-pnl (cycle-expiry uint)) 
