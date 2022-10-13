@@ -245,7 +245,7 @@
 (define-private (update-options-price-in-usd (timestamp uint)) 
 	(let
 		(
-			(decrement (* (mod (- timestamp (var-get auction-start-time)) (* min-in-seconds u30)) (var-get auction-decrement-value)))
+			(decrement (* (/ (- timestamp (var-get auction-start-time)) (* min-in-seconds u30)) (var-get auction-decrement-value)))
 		)
 		(var-set options-price-in-usd (some (- (unwrap-panic (var-get options-price-in-usd)) decrement)))
 	)
