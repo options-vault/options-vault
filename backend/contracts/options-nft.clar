@@ -41,7 +41,16 @@
 ;; TODO: Rename to options-batch-info or batch-info
 ;; TODO: Remove total-pnl (can be computed from remaining data points)
 ;; TODO: Add price-in-usd? Since auction can have multiple prices do we need to store start and end price, average price? (NOTE: all transactions can be viewed and analyzed on chain)
-(define-map options-info { cycle-expiry: uint } { strike: uint, first-token-id: uint, last-token-id: uint, option-pnl: (optional uint), total-pnl: (optional uint) }) 
+(define-map options-info 
+	{ cycle-expiry: uint } 
+	{ 
+		strike: uint, 
+		first-token-id: uint, 
+		last-token-id: uint, 
+		option-pnl: (optional uint), 
+		total-pnl: (optional uint) 
+	}
+) 
 ;; A list that holds a tuple with the cycle-expiry and the last-token-id minted for that expiry
 (define-data-var options-info-list (list 1000 { cycle-expiry: uint, last-token-id: uint }) (list))
 
@@ -80,8 +89,7 @@
 		(asserts! (> timestamp (get-last-block-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than the last block timestamp.
 		(asserts! (>= timestamp (var-get last-seen-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than or equal to the last seen timestamp.
 
-		;; TODO extract and set last usd stx rate 
-		;;(var-set last-stxusd-rate (some entries))
+		(var-set last-stxusd-rate (get value (element-at entries u0))) ;; TODO: check if stxusd is always the first entry in the list
 		(var-set last-seen-timestamp timestamp)		
 
 		(if current-cycle-expired 
@@ -131,7 +139,8 @@
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
 		)
 
-		(map-set options-info { cycle-expiry: next-cycle-expiry } 
+		(map-set options-info 
+			{ cycle-expiry: next-cycle-expiry } 
 			{ 
 			strike: strike, 
 			first-token-id: first-token-id, 
@@ -296,17 +305,21 @@
 )
 
 (define-private (find-expiry (token-id uint)) 
-	(fold find-expiry-helper (var-get options-info-list) {timestamp: u0, token-id: token-id, found: false})
+	(fold find-expiry-helper (var-get options-info-list) { timestamp: u0, token-id: token-id, found: false })
 )
 
-(define-private (find-expiry-helper (current-list-element { cycle-expiry: uint, last-token-id: uint }) (prev-value { timestamp: uint, token-id: uint, found: bool }) ) 
+(define-private (find-expiry-helper (current-element { cycle-expiry: uint, last-token-id: uint }) (prev-value { timestamp: uint, token-id: uint, found: bool }) ) 
 	(begin
 		(if 
 			(and 
-				(<= (get token-id prev-value) (get last-token-id current-list-element))
+				(<= (get token-id prev-value) (get last-token-id current-element))
 				(not (get found prev-value))
 			) 
-			{ timestamp: (get cycle-expiry current-list-element), token-id: (get token-id prev-value), found: true }
+			{ 
+				timestamp: (get cycle-expiry current-element), 
+				token-id: (get token-id prev-value), 
+				found: true 
+			}
 			prev-value
 		)
 	)
