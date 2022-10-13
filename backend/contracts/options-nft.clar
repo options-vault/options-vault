@@ -81,16 +81,16 @@
 		(var-set last-seen-timestamp timestamp)		
 
 		(if current-cycle-expired 
-			(begin
-				(try! (end-current-cycle))
-				(unwrap! (init-next-cycle) ERR_CYCLE_INIT_FAILED) 
-				;; TODO: Why can't I use try! here instead of unwrap!?
-			)
+			(try! (end-current-cycle))
 			true
 		)
 
 		(if settlement-tx-mined
-			(try! (contract-call? .vault distribute-pnl))
+			(begin
+				(try! (contract-call? .vault distribute-pnl))
+				(unwrap! (init-next-cycle) ERR_CYCLE_INIT_FAILED) 
+				;; TODO: Why can't I use try! here instead of unwrap!?
+			)
 			true
 		)
 		(ok true)
