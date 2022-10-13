@@ -91,6 +91,7 @@
 		(if settlement-tx-mined
 			(begin
 				(try! (contract-call? .vault distribute-pnl))
+				;; (try! (contract-call? .vault process-deposits-withdrawals))
 				(unwrap! (init-next-cycle) ERR_CYCLE_INIT_FAILED) 
 				;; TODO: Why can't I use try! here instead of unwrap!?
 			)
