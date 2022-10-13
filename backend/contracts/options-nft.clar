@@ -90,7 +90,7 @@
 		(asserts! (> timestamp (get-last-block-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than the last block timestamp.
 		(asserts! (>= timestamp (var-get last-seen-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than or equal to the last seen timestamp.
 
-		(var-set last-stxusd-rate (get value (element-at entries u0))) ;; TODO: check if stxusd is always the first entry in the list
+		(var-set last-stxusd-rate (get value (element-at (filter is-stxusd entries) u0))) ;; TODO: check if stxusd is always the first entry in the list after filtering
 		(var-set last-seen-timestamp timestamp)		
 
 		(if current-cycle-expired 
@@ -104,11 +104,16 @@
 				;; (try! (contract-call? .vault process-deposits-withdrawals))
 				(unwrap! (init-next-cycle) ERR_CYCLE_INIT_FAILED) 
 				;; TODO: Why can't I use try! here instead of unwrap!?
+				;; Alternative: (unwrap-panic (init-next-cycle)) - which one is better and why?
 			)
 			true
 		)
 		(ok true)
 	)
+)
+
+(define-private (is-stxusd (entries-list {symbol: (buff 32), value: uint})) 
+  (is-eq (get symbol entries-list) symbol-stxusd)
 )
 
 ;; END CURRENT CYCLE
@@ -135,7 +140,7 @@
 	(let 
 		(
 			(stxusd-rate (unwrap-panic (var-get last-stxusd-rate)))
-			(strike (calculate-strike stxusd-rate)) ;; simplified version
+			(strike (calculate-strike stxusd-rate)) ;; simplified calculation for mvp scope
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-seconds))
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
 		)
@@ -155,7 +160,7 @@
 		(var-set auction-start-time (var-get current-cycle-expiry))
 		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
 		(var-set current-cycle-expiry next-cycle-expiry)
-		(var-set options-for-sale (/ (contract-call? .vault get-total-balances) stacks-base)
+		(var-set options-for-sale (/ (contract-call? .vault get-total-balances) stacks-base))
 		(ok true) 
 	)
 )
