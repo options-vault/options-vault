@@ -45,7 +45,8 @@
 (define-data-var options-info-list (list 1000 { cycle-expiry: uint, last-token-id: uint }) (list))
 
 (define-data-var options-price-in-usd (optional uint) none)
-(define-data-var auction-start-time uint u0) ;; TOD): Since this is set to the cycle beginning (previous cycle-expiry) this variable is no longer needed
+(define-data-var options-for-sale uint u0)
+(define-data-var auction-start-time uint u0) ;; TODO: Since this is set to the cycle beginning (previous cycle-expiry) this variable is no longer needed
 (define-data-var auction-decrement-value uint u0)
 
 (define-data-var block-height-settlement uint u0) 
@@ -73,7 +74,7 @@
 		)
 		;; Check if the signer is a trusted oracle.
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
-		;; Check if the data is not stale, depending on how the app is designed. TODO: is last-block-timestamp check necessary
+		;; Check if the data is not stale, depending on how the app is designed. TODO: is last-block-timestamp check necessary?
 		(asserts! (> timestamp (get-last-block-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than the last block timestamp.
 		(asserts! (>= timestamp (var-get last-seen-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than or equal to the last seen timestamp.
 
@@ -136,6 +137,9 @@
 		(var-set auction-start-time (var-get current-cycle-expiry))
 		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
 		(var-set current-cycle-expiry next-cycle-expiry)
+		;; TODO: make sure the decimals between balances in the vault and options-minted-amount match
+		;; --> total-balances has to rounded down to a full number (full STX)
+		(var-set options-for-sale (contract-call? .vault get-total-balances))
 		(ok true) 
 	)
 )
@@ -214,11 +218,7 @@
 		)
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
 		;; Check if options-nft are available for sale. The contract can only sell as many options-nfts as there are funds in the vault
-		;; TODO: make sure the decimals between balances in the vault and options-minted-amount match
-		;; --> total-balances has to rounded down to a full number (full STX)
-		;; UNCOMMENT WHEN UPDATES FROM VAULT HAVE BEEN MERGED
-		;; (asserts! (< options-minted-amount (contract-call? .vault get-total-balances)) (err ERR_OPTIONS_SOLD_OUT))
-
+		(asserts! (> (var-get options-for-sale) u0) ERR_OPTIONS_SOLD_OUT)
 		;; Check if auciton has run for more than 180 minutes, this ensures that the auction never runs longer than 3 hours thus reducing delta risk
 		;; (i.e. the risk of a unfavorable change in the price of the underlying asset)
 		(asserts! (< timestamp (+ (var-get auction-start-time) (* min-in-seconds u180))) ERR_AUCTION_CLOSED)
@@ -254,7 +254,7 @@
 ;; SETTLEMENT
 
 ;; #[allow(unchecked_data)] 
-(define-public (claim-options-value (token-id uint) (timestamp uint) (stxusd-rate uint) (signature (buff 65))) ;; claim
+(define-public (claim (token-id uint) (timestamp uint) (stxusd-rate uint) (signature (buff 65))) ;; claim
   (let
     (
       (signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
@@ -329,6 +329,10 @@
   (ok (unwrap! (map-get? options-info {cycle-expiry: cycle-expiry}) ERR_NO_INFO_FOR_EXPIRY))
 )
 
+(define-private (get-options-pnl (cycle-expiry uint)) 
+	(ok true)
+	;; TODO implement functions, that checks for none value and returns error
+)
 ;; CONTRACT OWNERSHIP HELPER FUNCTIONS
 
 (define-public (set-contract-owner (new-owner principal))
