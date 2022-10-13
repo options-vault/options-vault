@@ -23,7 +23,7 @@
 
 (define-data-var total-balances uint u0)
 
-(define-data-var tx-to-settle-block uint u0)
+(define-data-var block-height-settlement uint u0)
 
 ;; private functions
 
@@ -197,11 +197,12 @@
 )
 
 ;; Distribute the premium between all the investor in the vault (depending of their participation rate)
-
+;; TODO: Update total-balances in line with the updates to the individual investor's balance
+;; TODO: Implement check that after distributor has run total-balances = vault-balance
 (define-private (evaluator (investor principal)) 
   (let  (
           (total-balance (var-get total-balances))
-          (vault-balance (stx-get-balance CONTRACT_ADDRESS)) 
+          (vault-balance (stx-get-balance CONTRACT_ADDRESS)) ;; - pending_deposits 
           (investor-info (unwrap-panic (map-get? ledger investor)))
           (investor-balance (get balance investor-info))
         )
@@ -221,13 +222,13 @@
 (define-public (distributor)
   (begin
     ;; (asserts! (is-eq CONTRACT_ADDRESS tx-sender) ONLY_CONTRACT_ALLOWED)
-    (asserts! (> (var-get tx-to-settle-block) block-height) HAS_TO_WAIT_UNTIL_NEXT_BLOCK)
-    ;; assert that balance at tx-to-settle-block is not equal to balance block-height (now)
+    (asserts! (> (var-get block-height-settlement) block-height) HAS_TO_WAIT_UNTIL_NEXT_BLOCK)
+    ;; assert that balance at block-height-settlement is not equal to balance block-height (now)
     ;; to handle edge cas where the settlement transaction was broadcast but was not mined in the first block
     (asserts! 
       (not (is-eq 
         (stx-get-balance CONTRACT_ADDRESS)
-        (at-block (unwrap-panic (get-block-info? id-header-hash (var-get tx-to-settle-block))) (stx-get-balance CONTRACT_ADDRESS))
+        (at-block (unwrap-panic (get-block-info? id-header-hash (var-get block-height-settlement))) (stx-get-balance CONTRACT_ADDRESS))
       ))
       TX_NOT_APPLIED_YET
     )
@@ -250,7 +251,7 @@
 (define-public (transfer-for-settlement (amount uint) (settlement-contract principal))
   (begin
     (asserts! (> amount u0) INVALID_AMOUNT)
-    (var-set tx-to-settle-block block-height)
+    (var-set block-height-settlement block-height)
     (try! (as-contract (stx-transfer? amount tx-sender settlement-contract)))
     (ok true)
   )
