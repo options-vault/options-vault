@@ -29,9 +29,8 @@
 
 ;; A map of all trusted oracles, indexed by their 33 byte compressed public key.
 (define-map trusted-oracles (buff 33) bool)
-(map-set trusted-oracles 0x03f6f2c89ad8ec1bf29a47bf2b3decc36c3083b49b38be730f372ffdfbcce341eb true)
-;; redstone oracle: 
-;; 0x03009dd87eb41d96ce8ad94aa22ea8b0ba4ac20c45e42f71726d6b180f93c3f298
+;; 0x3009....298 is redstone
+(map-set trusted-oracles 0x03009dd87eb41d96ce8ad94aa22ea8b0ba4ac20c45e42f71726d6b180f93c3f298 true)
 
 (define-data-var last-seen-timestamp uint (if (> block-height u0) (get-last-block-timestamp) u0))
 (define-data-var last-stxusd-rate (optional uint) none)
