@@ -21,6 +21,7 @@
 (define-non-fungible-token options-nft uint)
 (define-data-var token-id-nonce uint u0)
 
+;; TODO: Ensure that all uints are adjusted to different bases 
 (define-constant symbol-stxusd 0x535458555344) ;; "STXUSD" as a buff
 (define-constant redstone-value-shift u100000000)
 (define-constant stacks-base u1000000)
@@ -154,9 +155,7 @@
 		(var-set auction-start-time (var-get current-cycle-expiry))
 		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
 		(var-set current-cycle-expiry next-cycle-expiry)
-		;; TODO: make sure the decimals between balances in the vault and options-minted-amount match
-		;; --> total-balances has to rounded down to a full number (full STX) (NEXT)
-		(var-set options-for-sale (contract-call? .vault get-total-balances))
+		(var-set options-for-sale (/ (contract-call? .vault get-total-balances) stacks-base)
 		(ok true) 
 	)
 )
