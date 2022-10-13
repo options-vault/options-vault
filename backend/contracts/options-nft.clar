@@ -69,7 +69,7 @@
 	(let 
 		(
 			;; Recover the pubkey of the signer.
-			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
+			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
 			(current-cycle-expired (> timestamp (var-get current-cycle-expiry)))
 			(settlement-tx-mined (> block-height (var-get block-height-settlement)))
 		)
