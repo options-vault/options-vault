@@ -39,7 +39,7 @@
 ;; The unix timestamp of the expiry date of the current cycle
 (define-data-var current-cycle-expiry uint u1665763200) ;; set to Fri Oct 14 2022 16:00:00 GMT+0000
 ;; A map that holds the relevant data points for each batch of options issued by the contract
-;; TODO: Rename to options-batch-info or batch-info
+;; TODO: Rename to options-ledger
 ;; TODO: Remove total-pnl (can be computed from remaining data points)
 ;; TODO: Add price-in-usd? Since auction can have multiple prices do we need to store start and end price, average price? (NOTE: all transactions can be viewed and analyzed on chain)
 (define-map options-info 
@@ -143,6 +143,8 @@
 			(strike (calculate-strike stxusd-rate)) ;; simplified calculation for mvp scope
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-seconds))
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
+			(normal-start-time (+ (var-get current-cycle-expiry) (* u120 min-in-seconds)))
+			(now (var-get last-seen-timestamp))
 		)
 
 		(map-set options-info 
@@ -157,7 +159,10 @@
 		)
 
 		(set-options-price stxusd-rate)
-		(var-set auction-start-time (var-get current-cycle-expiry))
+		(if (< now normal-start-time) 
+			(var-set auction-start-time normal-start-time)	
+			(var-set auction-start-time now)
+		)
 		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
 		(var-set current-cycle-expiry next-cycle-expiry)
 		(var-set options-for-sale (/ (contract-call? .vault get-total-balances) stacks-base))
