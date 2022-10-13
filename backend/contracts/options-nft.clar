@@ -3,7 +3,7 @@
 ;; SIP009 NFT trait on mainnet
 ;; (impl-trait 'SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.nft-trait.nft-trait)
 
-;; TODO: capitalized error codes to comply with coding best practices
+;; TODO: Clean up error codes
 (define-constant ERR_NOT_CONTRACT_OWNER (err u100))
 (define-constant ERR_UNTRUSTED_ORACLE (err u101))
 (define-constant ERR_STALE_RATE (err u102))
@@ -37,13 +37,16 @@
 ;; The unix timestamp of the expiry date of the current cycle
 (define-data-var current-cycle-expiry uint u1665763200) ;; set to Fri Oct 14 2022 16:00:00 GMT+0000
 ;; A map that holds the relevant data points for each batch of options issued by the contract
-(define-map options-info { cycle-expiry: uint } { strike: uint, first-token-id: uint, last-token-id: uint, option-pnl: (optional uint), total-pnl: (optional uint) }) ;; TODO: remove total-pnl
+;; TODO: Rename to options-batch-info or batch-info
+;; TODO: remove total-pnl
+;; TODO: Add price-in-usd? Since auction can have multiple prices do we need to store start and end price, average price? (NOTE: all transactions can be viewed and analyzed on chain)
+(define-map options-info { cycle-expiry: uint } { strike: uint, first-token-id: uint, last-token-id: uint, option-pnl: (optional uint), total-pnl: (optional uint) }) 
 ;; A list that holds a tuple with the cycle-expiry and the last-token-id minted for that expiry
 (define-data-var options-info-list (list 1000 { cycle-expiry: uint, last-token-id: uint }) (list))
 
-(define-data-var mint-open bool false)
 (define-data-var options-price-in-usd (optional uint) none)
-(define-data-var auction-start-time uint u0) 
+(define-data-var auction-open bool false)
+(define-data-var auction-start-time uint u0) ;; TOD): Since this is set to the cycle beginning (previous cycle-expiry) this variable is no longer needed
 (define-data-var auction-decrement-value uint u0)
 
 (define-data-var block-height-settlement uint u0) 
@@ -51,14 +54,15 @@
 (define-constant week-in-seconds u604800)
 (define-constant min-in-seconds u60)
 
+;; TODO: Check units for all STX transactions (mint, settlement), priced in USD but settled in STX
+
 ;; TODO: Add fail-safe public function that allows contract-owner to manually initalize AND end the next cycle. 
 ;; TODO: Add functions to set start-init-window and end-init-window
 ;; TODO: Instead of passing timestamp from receiver functions to later functions, get the timestamp from last-seen-timestamp
 
-;; FUNCTION TO RECEIVE PRICE DATA FROM SERVER
+;; FUNCTION TO RECEIVE & VALIDATE PRICE DATA FROM REDSTONE SERVER + CONTROL CENTER FUNCTION 
 
 ;; TODO: implement helper functiont that abstracts away recover-signer contract call and is-trusted-oracle assert 
-
 ;; #[allow(unchecked_data)]
 (define-public (submit-price-data (timestamp uint) (stxusd-rate uint) (signature (buff 65)))
 	(let 
@@ -70,12 +74,11 @@
 		)
 		;; Check if the signer is a trusted oracle.
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
-		;; Check if the data is not stale, depending on how the app is designed.
+		;; Check if the data is not stale, depending on how the app is designed. TODO: is last-block-timestamp check necessary
 		(asserts! (> timestamp (get-last-block-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than the last block timestamp.
 		(asserts! (>= timestamp (var-get last-seen-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than or equal to the last seen timestamp.
-		;; Save last seen stxusd price
+
 		(var-set last-stxusd-rate (some stxusd-rate))
-		;; Save last seen timestamp.
 		(var-set last-seen-timestamp timestamp)		
 
 		(if current-cycle-expired 
@@ -95,6 +98,21 @@
 	)
 )
 
+;; END CURRENT CYCLE
+
+(define-private (end-current-cycle)
+	(let
+		(
+			(last-token-id (var-get token-id-nonce))
+			(cycle-tuple { cycle-expiry: (var-get current-cycle-expiry), last-token-id: last-token-id })
+		) 
+		(var-set auction-open false)
+		(try! (determine-and-set-value))
+		(add-to-options-info-list cycle-tuple)
+		(ok true)
+	) 
+)
+
 ;; INITIALIZE NEXT CYCLE
 
 (define-private (init-next-cycle) 
@@ -105,7 +123,8 @@
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-seconds))
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
 		)
-		(map-set options-info { cycle-expiry: next-cycle-expiry } ;; possibly rename to batch-info
+
+		(map-set options-info { cycle-expiry: next-cycle-expiry } 
 			{ 
 			strike: strike, 
 			first-token-id: first-token-id, 
@@ -114,8 +133,9 @@
 			total-pnl: none 
 			}
 		)
+
 		(set-options-price stxusd-rate)
-		(var-set mint-open true)
+		(var-set auction-open true)
 		(var-set auction-start-time (var-get current-cycle-expiry))
 		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
 		(var-set current-cycle-expiry next-cycle-expiry)
@@ -123,20 +143,7 @@
 	)
 )
 
-
-(define-private (end-current-cycle)
-	(let
-		(
-			(last-token-id (var-get token-id-nonce))
-			(cycle-tuple { cycle-expiry: (var-get current-cycle-expiry), last-token-id: last-token-id })
-		) 
-		(var-set mint-open false)
-		(try! (determine-and-set-value))
-		(add-to-options-info-list cycle-tuple)
-		(ok true)
-	) 
-)
-
+;; TODO: Move to the back of the file
 (define-private (add-to-options-info-list (cycle-tuple { cycle-expiry: uint, last-token-id: uint}))
   (var-set options-info-list (unwrap-panic (as-max-len? (append (var-get options-info-list) cycle-tuple) u1000)))
 )
@@ -149,27 +156,32 @@
 	  	(settlement-options-info (try! (get-options-info settlement-expiry)))
     	(strike (get strike settlement-options-info))
 			(options-minted-amount (- (get first-token-id settlement-options-info) (get last-token-id settlement-options-info)))
-			(total-pnl (* (- strike stxusd-rate) options-minted-amount))
 		)
 		(if (> strike stxusd-rate) 
-			;; option is in-the-money and the pnl is positive
-			;; TODO: Add transfer of funds from vault to settlement --> creaet pool of money for payouts (set aside)
+			;; option is in-the-money, pnl is positive
 			(begin
 				(map-set options-info 
 					{ cycle-expiry: settlement-expiry } 
 					(merge
 						settlement-options-info
-						{ option-pnl: (some (- strike stxusd-rate)), total-pnl: (some total-pnl) }
+						{ 
+							option-pnl: (some (- strike stxusd-rate)), ;; TODO: Convert amount to STX
+							total-pnl: (some (* (- strike stxusd-rate) options-minted-amount)) ;; TODO: Convert amount to STX
+						}
 					)
 				)
-			(try! (contract-call? .vault transfer-for-settlement total-pnl (as-contract tx-sender)))
+			;; Send 
+			(try! (contract-call? .vault transfer-for-settlement (* (- strike stxusd-rate) options-minted-amount) (as-contract tx-sender))) ;; TODO: Convert amount to STX
 			)
-			;; option is out-of-the-money and the pnl is zero
+			;; option is out-of-the-money, pnl is zero
 			(map-set options-info 
 				{ cycle-expiry: settlement-expiry } 
 				(merge
 					settlement-options-info
-					{ option-pnl: (some u0), total-pnl: (some u0) }
+					{ 
+						option-pnl: (some u0), 
+						total-pnl: (some u0) 
+					}
 				)
 			)
 		)
@@ -224,7 +236,7 @@
 				;; function to close the auction "manually" to ensure a safe transition the next cycle
 				(and 
 					(< timestamp (+ (var-get auction-start-time) (* min-in-seconds u180)))
-					(var-get mint-open)
+					(var-get auction-open)
 				)
 			) 
 			ERR_AUCTION_CLOSED
