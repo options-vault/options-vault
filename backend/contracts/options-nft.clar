@@ -66,7 +66,7 @@
 			;; Recover the pubkey of the signer.
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
 			(current-cycle-expired (> timestamp (var-get current-cycle-expiry)))
-			(cycle-settled (> block-height (var-get block-height-settlement)))
+			(settlement-tx-mined (> block-height (var-get block-height-settlement)))
 		)
 		;; Check if the signer is a trusted oracle.
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
@@ -87,7 +87,7 @@
 			true
 		)
 
-		(if cycle-settled
+		(if settlement-tx-mined
 			(try! (contract-call? .vault distributor))
 			true
 		)
@@ -101,7 +101,7 @@
 	(let 
 		(
 			(stxusd-rate (unwrap-panic (var-get last-stxusd-rate)))
-			(strike (/ (* stxusd-rate u115) u100)) ;; simplified version --> TODO: Make private helper function
+			(strike (calculate-strike stxusd-rate)) ;; simplified version
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-seconds))
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
 		)
@@ -180,10 +180,16 @@
 
 
 (define-private (set-options-price (stxusd-rate uint)) 
-	;; The price is determined using a simplified calculation that sets options price as 0.5% of the stxusd price.
-	;; If all 52 weekly options for a year would expiry worthless, a uncompounded 26% APY would be achieved by this pricing strategy.
-	;; In the next iteration we intend to replace this simplified calculation with the Black Scholes formula - the industry standard for pricing European style options. 
+	;; The price is determined using a simplified calculation that sets options price as 0.5% of the stxusd price
+	;; If all 52 weekly options for a year would expiry worthless, a uncompounded 26% APY would be achieved by this pricing strategy
+	;; In the next iteration we intend to replace this simplified calculation with the Black Scholes formula - the industry standard for pricing European style options
 	(var-set options-price-in-usd (some (/ stxusd-rate u200)))
+)
+
+(define-private (calculate-strike (stxusd-rate uint))
+	;; A simple calculation to set the strike price 15% higher than the current price of the underlying asset
+	;; In the next iteration we intend to replace this simplified calculation with a calculation that thanks more variables (i.e. volatility) into account
+	(/ (* stxusd-rate u115) u100)
 )
 
 ;; NFT MINTING (Priced in USD, payed in STX)
