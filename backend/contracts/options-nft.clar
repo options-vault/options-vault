@@ -50,12 +50,13 @@
 (define-data-var auction-start-time uint u0) ;; TODO: Since this is set to the cycle beginning (previous cycle-expiry) this variable is no longer needed
 (define-data-var auction-decrement-value uint u0)
 
-(define-data-var block-height-settlement uint u0) 
+(define-data-var settlement-block-height uint u0) 
 
 (define-constant week-in-seconds u604800)
 (define-constant min-in-seconds u60)
 
 ;; TODO: Check units for all STX transactions (mint, settlement), priced in USD but settled in STX
+;; --> Should the option be priced in STX to the end user? (like on Deribit)
 
 ;; TODO: Add fail-safe public function that allows contract-owner to manually initalize AND end the next cycle. 
 ;; TODO: Add functions to set start-init-window and end-init-window
@@ -71,7 +72,7 @@
 			;; Recover the pubkey of the signer.
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
 			(current-cycle-expired (> timestamp (var-get current-cycle-expiry)))
-			(settlement-tx-mined (> block-height (var-get block-height-settlement)))
+			(settlement-tx-mined (> block-height (var-get settlement-block-height)))
 		)
 		;; Check if the signer is a trusted oracle.
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
@@ -193,7 +194,7 @@
 				)
 			)
 		)
-		(var-set block-height-settlement block-height)
+		(var-set settlement-block-height block-height)
   	(ok true)
 	)
 )
