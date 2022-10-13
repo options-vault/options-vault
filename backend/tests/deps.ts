@@ -9,9 +9,6 @@ export type PricePackage = {
 	timestamp: number
 };
 
-// One day Clarinet may be able to import actual project source files so we
-// can stop repeating code.
-
 export function shiftPriceValue(value: number) {
 	return Math.round(value * (10 ** 8))
 }
@@ -36,8 +33,8 @@ export function pricePackageToCV(pricePackage: PricePackage) {
 }
 
  export function liteSignatureToStacksSignature(liteSignature:string) {
-	let bytes = hexToBytes(liteSignature)
-	bytes = bytes.slice(1, bytes.length)
+
+	let bytes = hexToBytes(liteSignature.slice(2, liteSignature.length))
 	if (bytes.length !== 65)
 		throw new Error(`Invalid liteSignature, expected 65 bytes got ${bytes.length}`);
 	let converted = new Uint8Array(bytes);

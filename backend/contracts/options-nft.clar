@@ -28,9 +28,10 @@
 
 ;; A map of all trusted oracles, indexed by their 33 byte compressed public key.
 (define-map trusted-oracles (buff 33) bool)
-(map-set trusted-oracles 0x035ca791fed34bf9e9d54c0ce4b9626e1382cf13daa46aa58b657389c24a751cc6 true)
+(map-set trusted-oracles 0x03f6f2c89ad8ec1bf29a47bf2b3decc36c3083b49b38be730f372ffdfbcce341eb true)
+;; redstone oracle: 
+;; 0x03009dd87eb41d96ce8ad94aa22ea8b0ba4ac20c45e42f71726d6b180f93c3f298
 
-;; Last seen timestamp. The if clause is so that the contract can deploy on a Clarinet console session.
 (define-data-var last-seen-timestamp uint (if (> block-height u0) (get-last-block-timestamp) u0))
 (define-data-var last-stxusd-rate (optional uint) none)
 
@@ -64,11 +65,11 @@
 
 ;; TODO: implement helper function that abstracts away recover-signer contract call and is-trusted-oracle assert 
 ;; #[allow(unchecked_data)]
-(define-public (submit-price-data (timestamp uint) (stxusd-rate uint) (signature (buff 65)))
+(define-public (submit-price-data (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65)))
 	(let 
 		(
 			;; Recover the pubkey of the signer.
-			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
+			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
 			(current-cycle-expired (> timestamp (var-get current-cycle-expiry)))
 			(settlement-tx-mined (> block-height (var-get block-height-settlement)))
 		)
@@ -78,7 +79,8 @@
 		(asserts! (> timestamp (get-last-block-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than the last block timestamp.
 		(asserts! (>= timestamp (var-get last-seen-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than or equal to the last seen timestamp.
 
-		(var-set last-stxusd-rate (some stxusd-rate))
+		;; TODO extract and set last usd stx rate 
+		;;(var-set last-stxusd-rate (some entries))
 		(var-set last-seen-timestamp timestamp)		
 
 		(if current-cycle-expired 
@@ -110,6 +112,10 @@
 		(add-to-options-info-list cycle-tuple)
 		(ok true)
 	) 
+)
+
+(define-public (recover-signer  (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65))) 
+	(contract-call? .redstone-verify recover-signer timestamp entries signature)
 )
 
 ;; INITIALIZE NEXT CYCLE
