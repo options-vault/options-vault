@@ -45,7 +45,6 @@
 (define-data-var options-info-list (list 1000 { cycle-expiry: uint, last-token-id: uint }) (list))
 
 (define-data-var options-price-in-usd (optional uint) none)
-(define-data-var auction-open bool false)
 (define-data-var auction-start-time uint u0) ;; TOD): Since this is set to the cycle beginning (previous cycle-expiry) this variable is no longer needed
 (define-data-var auction-decrement-value uint u0)
 
@@ -106,7 +105,6 @@
 			(last-token-id (var-get token-id-nonce))
 			(cycle-tuple { cycle-expiry: (var-get current-cycle-expiry), last-token-id: last-token-id })
 		) 
-		(var-set auction-open false)
 		(try! (determine-value-and-settle))
 		(add-to-options-info-list cycle-tuple)
 		(ok true)
@@ -135,7 +133,6 @@
 		)
 
 		(set-options-price stxusd-rate)
-		(var-set auction-open true)
 		(var-set auction-start-time (var-get current-cycle-expiry))
 		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
 		(var-set current-cycle-expiry next-cycle-expiry)
@@ -213,9 +210,7 @@
 			;; Recover the pubkey of the signer.
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
 			(token-id (+ (var-get token-id-nonce) u1))
-			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-seconds))
-      (next-cycle-options-info (try! (get-options-info next-cycle-expiry)))
-			(options-minted-amount (- (get last-token-id next-cycle-options-info) (get first-token-id next-cycle-options-info)))
+      (current-cycle-options-info (try! (get-options-info (var-get current-cycle-expiry))))
 		)
 		;; Check if the signer is a trusted oracle. If it fails, then the possible price
 		;; update via get-update-latest-price-in-stx is also reverted. This is important.
@@ -226,36 +221,22 @@
 		;; UNCOMMENT WHEN UPDATES FROM VAULT HAVE BEEN MERGED
 		;; (asserts! (< options-minted-amount (contract-call? .vault get-total-balances)) (err ERR_OPTIONS_SOLD_OUT))
 
-		;; Check if mint function is being called in the auction window of start + 25 blocks
-		(asserts! 
-			(and
-				(>= timestamp (var-get auction-start-time)) ;; always true / reduandant
-				;; Check if auciton has run for more than 180 minutes or end-current-cycle has closed the auction
-				;; Having both checks ensures that (a) the auction never runs longer than 3 hours thus reducing delta risk
-				;; (i.e. the risk of a unfavorable change in the price of the underlying asset) and (b) allows the end-current-cycle
-				;; function to close the auction "manually" to ensure a safe transition the next cycle
-				(and 
-					(< timestamp (+ (var-get auction-start-time) (* min-in-seconds u180)))
-					(var-get auction-open)
-				)
-			) 
-			ERR_AUCTION_CLOSED
-		)
+		;; Check if auciton has run for more than 180 minutes, this ensures that the auction never runs longer than 3 hours thus reducing delta risk
+		;; (i.e. the risk of a unfavorable change in the price of the underlying asset)
+		(asserts! (< timestamp (+ (var-get auction-start-time) (* min-in-seconds u180))) ERR_AUCTION_CLOSED)
 		;; Update the mint price based on where in the 180 min minting window we are 
 		(update-options-price-in-usd timestamp)
 		;; Update the token ID nonce
 		(var-set token-id-nonce token-id)
-		;; Send the STX equivalent to the contract owner
-		;; TO DO: send STX to vault contract instead of contract-owner
+		;; Deposit the premium payment in to the vault contract
 		(try! (contract-call? .vault deposit-premium (try! (get-update-latest-price-in-stx timestamp stxusd-rate)) tx-sender))
-		;; (try! (stx-transfer? (try! (get-update-latest-price-in-stx timestamp stxusd-rate)) tx-sender (var-get contract-owner)))
 		;; Mint the NFT
 		(try! (nft-mint? options-nft token-id tx-sender))
 		;; Add the token-id of the minted NFT as the last-token-id in the options-info map
 		(map-set options-info 
-			{ cycle-expiry: next-cycle-expiry } 
+			{ cycle-expiry: (var-get current-cycle-expiry) } 
 			(merge
-				next-cycle-options-info
+				current-cycle-options-info
 				{ last-token-id: token-id }
 			)
 		)
