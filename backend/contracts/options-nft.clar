@@ -138,7 +138,7 @@
 		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
 		(var-set current-cycle-expiry next-cycle-expiry)
 		;; TODO: make sure the decimals between balances in the vault and options-minted-amount match
-		;; --> total-balances has to rounded down to a full number (full STX)
+		;; --> total-balances has to rounded down to a full number (full STX) (NEXT)
 		(var-set options-for-sale (contract-call? .vault get-total-balances))
 		(ok true) 
 	)
@@ -221,6 +221,7 @@
 		(asserts! (> (var-get options-for-sale) u0) ERR_OPTIONS_SOLD_OUT)
 		;; Check if auciton has run for more than 180 minutes, this ensures that the auction never runs longer than 3 hours thus reducing delta risk
 		;; (i.e. the risk of a unfavorable change in the price of the underlying asset)
+		;; TODO: Adjust mint window to new excalidraw timeline (NEXT)
 		(asserts! (< timestamp (+ (var-get auction-start-time) (* min-in-seconds u180))) ERR_AUCTION_CLOSED)
 		;; Update the mint price based on where in the 180 min minting window we are 
 		(update-options-price-in-usd timestamp)
