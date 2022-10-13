@@ -30,8 +30,9 @@
 
 ;; A map of all trusted oracles, indexed by their 33 byte compressed public key.
 (define-map trusted-oracles (buff 33) bool)
-(map-set trusted-oracles 0x035ca791fed34bf9e9d54c0ce4b9626e1382cf13daa46aa58b657389c24a751cc6 true)
-
+(map-set trusted-oracles 0x03f6f2c89ad8ec1bf29a47bf2b3decc36c3083b49b38be730f372ffdfbcce341eb true)
+;; redstone oracle: 
+;; 0x03009dd87eb41d96ce8ad94aa22ea8b0ba4ac20c45e42f71726d6b180f93c3f298
 ;; A map that holds the strike price for each contract and assigns token-ids to expiry
 (define-map options-info { expiry-timestamp: uint } { strike: uint, first-token-id: uint, last-token-id: uint, option-pnl: (optional uint), total-pnl: (optional uint) })
 ;; A list that holds a tuple with the expiry-timestamp and the last-token-id minted for that expiry
@@ -58,11 +59,11 @@
 ;; TODO: implement helper functiont that abstracts away recover-signer contract call and is-trusted-oracle assert 
 
 ;; #[allow(unchecked_data)]
-(define-public (submit-price-data (timestamp uint) (stxusd-rate uint) (signature (buff 65)))
+(define-public (submit-price-data (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65)))
 	(let 
 		(
 			;; Recover the pubkey of the signer.
-			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
+			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
 			(start-init-window (- (var-get current-cycle-expiry) (* u190 min-in-seconds)))
 			(end-init-window (- (var-get current-cycle-expiry) (* u180 min-in-seconds)))
 			(init-window-active (and (> timestamp start-init-window) (< timestamp end-init-window)))
@@ -74,7 +75,8 @@
 		(asserts! (> timestamp (get-last-block-timestamp)) err-stale-rate) ;; timestamp should be larger than the last block timestamp.
 		(asserts! (>= timestamp (var-get last-seen-timestamp)) err-stale-rate) ;; timestamp should be larger than or equal to the last seen timestamp.
 		;; Save last seen stxusd price
-		(var-set last-stxusd-rate (some stxusd-rate))
+		;; TODO extract and set last usd stx rate 
+		;;(var-set last-stxusd-rate (some entries))
 		;; Save last seen timestamp.
 		(var-set last-seen-timestamp timestamp)		
 		;; check if timestamp > start and timestamp < end of initialization time range
@@ -88,6 +90,10 @@
 		)
 		(ok true)
 	)
+)
+
+(define-public (recover-signer  (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65))) 
+	(contract-call? .redstone-verify recover-signer timestamp entries signature)
 )
 
 ;; INITIALIZE NEXT CYCLE
