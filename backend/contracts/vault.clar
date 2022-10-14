@@ -34,16 +34,16 @@
 ;; Functions that checks what is the user's balance/pending-withdrawal/pending-deposit in the vault
 
 ;; Balance helper functions
-(define-read-only (get-balance)
+(define-read-only (get-investor-balance)
   (get balance (map-get? ledger tx-sender))
 )
 
 (define-private (add-to-balance (amount uint)) 
-  (+ (default-to u0 (get-balance)) amount)
+  (+ (default-to u0 (get-investor-balance)) amount)
 )
 
 (define-private (substract-to-balance (amount uint)) 
-  (- (default-to u0 (get-balance)) amount)
+  (- (default-to u0 (get-investor-balance)) amount)
 )
 
 ;; Deposit helper functions
@@ -212,7 +212,7 @@
 ;;                     which will be executed at the end of the current cycle
 (define-public (queue-withdrawal (amount uint)) 
   (let  (
-          (investor-balance (unwrap! (get-balance) TX_SENDER_NOT_IN_LEDGER))
+          (investor-balance (unwrap! (get-investor-balance) TX_SENDER_NOT_IN_LEDGER))
           (investor-pending-withdrawal (get-pending-withdrawal))
           (investor-info (unwrap-panic (map-get? ledger tx-sender)))
         )
