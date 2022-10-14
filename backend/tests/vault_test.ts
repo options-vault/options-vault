@@ -2,7 +2,7 @@
 import { Clarinet, Tx, Chain, Account, types } from 'https://deno.land/x/clarinet@v1.0.2/index.ts';
 import { assert, assertEquals } from 'https://deno.land/std@0.90.0/testing/asserts.ts';
 import { CreateTwoDepositorsAndProcess } from "./deps.ts"
-
+const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
 
 
 Clarinet.test({
@@ -12,10 +12,41 @@ Clarinet.test({
         const wallet_2 = accounts.get('wallet_2')?.address ?? ""
         let block = CreateTwoDepositorsAndProcess(chain, accounts)
 
+        block.receipts[0].events.expectSTXTransferEvent(1000, wallet_1, vaultContract)
+        block.receipts[1].events.expectSTXTransferEvent(2000, wallet_2, vaultContract)
+        block.receipts[2].result.expectOk();
+        // TODO check contract balance
+        //console.log(block.receipts[0].events[0])
+    },
+});
 
-        block.receipts[0].events.expectSTXTransferEvent(1000, wallet_1, "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault")
-        block.receipts[1].events.expectSTXTransferEvent(2000, wallet_2, "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault")
-        block.receipts[2].result.expectOk()
+Clarinet.test({
+    name: "Ensure that (only) users can withdraw",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const wallet_1 = accounts.get('wallet_1')?.address ?? ""
+        const wallet_2 = accounts.get('wallet_2')?.address ?? ""
+        const wallet_3 = accounts.get('wallet_2')?.address ?? ""
+
+        let block = CreateTwoDepositorsAndProcess(chain, accounts)
+
+        console.log(wallet_3)
+        console.log(wallet_1)
+
+        block = chain.mineBlock([
+            // random tries to withdraw, should fail
+            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000)], wallet_3),
+            // user tries to withdraw their whole account, should succeed
+            // Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000)], wallet_1),
+            // // user withdraws part of account, should succeed 
+            // Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000)], wallet_2),
+            // // user withdraw the rest of their account, should succeed
+            // Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000)], wallet_2),
+            // // user withdraws after they have withdrawn their total account, should fail
+            // Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000)], wallet_2)
+            
+        ]);
+        console.log(block.receipts)
+        // TODO check contract balance
         //console.log(block.receipts[0].events[0])
     },
 });
