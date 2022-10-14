@@ -33,15 +33,15 @@ Clarinet.test({
         // TODO: This is great - each of the contractCalls should ideally be their own test
         block = chain.mineBlock([
             // random tries to withdraw, should fail
-            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000)], wallet_3),
+            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_3),
             // user tries to withdraw their whole account, should succeed
-            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000)], wallet_1),
+            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
             // user withdraws part of account, should succeed 
-            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000)], wallet_2),
+            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
             // user withdraw the rest of their account, should succeed
-            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000)], wallet_2),
+            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
             // user withdraws after they have withdrawn their total account, should fail
-            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000)], wallet_2),
+            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
             // 
             Tx.contractCall("vault", "process-withdrawals", [], wallet_1)
             
