@@ -18,7 +18,7 @@
 ;; data maps and vars
 
 ;; Ledger map to store balances and withdraw/deposit requests for each principal (investor type / vault)
-(define-map ledger principal { address: principal, balance: uint, pending-deposits: uint, pending-withdraw: uint })
+(define-map ledger principal { address: principal, balance: uint, pending-deposits: uint, pending-withdrawal: uint })
 
 (define-data-var investor-addresses (list 1000 principal) (list))
 
@@ -31,7 +31,7 @@
 
 ;; private functions
 
-;; Functions that checks what is the user's balance/pending-withdraw/pending-deposit in the vault
+;; Functions that checks what is the user's balance/pending-withdrawal/pending-deposit in the vault
 
 ;; Balance helper functions
 (define-read-only (get-balance)
@@ -60,16 +60,16 @@
 )
 
 ;; Withdraw helper functions
-(define-read-only (get-pending-withdraw) 
-  (default-to u0 (get pending-withdraw (map-get? ledger tx-sender)))
+(define-read-only (get-pending-withdrawal) 
+  (default-to u0 (get pending-withdrawal (map-get? ledger tx-sender)))
 )
 
-(define-private (substract-pending-withdraw (amount uint)) 
-  (-  (get-pending-withdraw) amount)
+(define-private (substract-pending-withdrawal (amount uint)) 
+  (-  (get-pending-withdrawal) amount)
 )
 
-(define-private (add-pending-withdraw (amount uint))
-  (+ (get-pending-withdraw) amount)
+(define-private (add-pending-withdrawal (amount uint))
+  (+ (get-pending-withdrawal) amount)
 )
 
 ;; Update investor-addresses list - helper function
@@ -136,7 +136,7 @@
             address: tx-sender,
             balance: u0,
             pending-deposits: amount,
-            pending-withdraw: u0
+            pending-withdrawal: u0
           }
         )
       (add-to-list tx-sender)
@@ -167,39 +167,39 @@
   )
 )
 
-;; <process-withdrawals-updater>: Substracts the pending-withdraw amount (and resets it) from balance amount for each investor in the ledger
-;;                                and make a transfer of the pending-withdraw amount from the vaul contract to the investor's address, but 
+;; <process-withdrawals-updater>: Substracts the pending-withdrawal amount (and resets it) from balance amount for each investor in the ledger
+;;                                and make a transfer of the pending-withdrawal amount from the vaul contract to the investor's address, but 
 ;;                                only if there is some conditions true, also substracts this amount from total-balances to keep this variable 
 ;;                                updated.
 (define-private (process-withdrawals-updater (investor principal)) 
   (let  (
           (investor-info (unwrap-panic (map-get? ledger investor)))
           (investor-balance (get balance investor-info))
-          (investor-pending-withdrawal (get pending-withdraw investor-info))
+          (investor-pending-withdrawalal (get pending-withdrawal investor-info))
           (investor-address (get address investor-info))
         )
         (if (and 
-              (>= investor-balance investor-pending-withdrawal)
-              (> investor-pending-withdrawal u0)
+              (>= investor-balance investor-pending-withdrawalal)
+              (> investor-pending-withdrawalal u0)
             )
-            ;; if investor's balance is equal or greater than its pending-withdraw amount
-            ;; and investor's pending-withdraw amount is greater than 0
+            ;; if investor's balance is equal or greater than its pending-withdrawal amount
+            ;; and investor's pending-withdrawal amount is greater than 0
             (begin 
-              (try! (as-contract (stx-transfer? investor-pending-withdrawal tx-sender investor-address)))
-              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
+              (try! (as-contract (stx-transfer? investor-pending-withdrawalal tx-sender investor-address)))
+              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawalal))
               (map-set ledger
                 tx-sender
                 (merge
                   investor-info
                   {
                     balance: 
-                      (substract-to-balance investor-pending-withdrawal),
-                    pending-withdraw:
+                      (substract-to-balance investor-pending-withdrawalal),
+                    pending-withdrawal:
                       u0
                   }  
                 )
               )
-              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
+              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawalal))
             )
             ;; if false just pass
             true
@@ -208,22 +208,22 @@
   )
 )
 
-;; <queue-withdrawal>: Adds the amount to pending-withdraw amount for the investor in the ledger that wants to request a withdrawal
+;; <queue-withdrawal>: Adds the amount to pending-withdrawal amount for the investor in the ledger that wants to request a withdrawal
 ;;                     which will be executed at the end of the current cycle
 (define-public (queue-withdrawal (amount uint)) 
   (let  (
           (investor-balance (unwrap! (get-balance) TX_SENDER_NOT_IN_LEDGER))
-          (investor-pending-withdrawal (get-pending-withdraw))
+          (investor-pending-withdrawalal (get-pending-withdrawal))
           (investor-info (unwrap-panic (map-get? ledger tx-sender)))
         )
-        (asserts! (>= investor-balance (+ investor-pending-withdrawal amount)) INSUFFICIENT_FUNDS)
+        (asserts! (>= investor-balance (+ investor-pending-withdrawalal amount)) INSUFFICIENT_FUNDS)
         (map-set ledger  
           tx-sender
           (merge 
             investor-info
             {
-              pending-withdraw:
-                (add-pending-withdraw amount) 
+              pending-withdrawal:
+                (add-pending-withdrawal amount) 
             }
           )
         )
@@ -239,7 +239,7 @@
     ;; (asserts! (is-eq CONTRACT_ADDRESS tx-sender) ONLY_CONTRACT_ALLOWED)
     (asserts! (> (var-get block-height-settlement) block-height) HAS_TO_WAIT_UNTIL_NEXT_BLOCK)
     ;; assert that balance at block-height-settlement is not equal to balance block-height (now)
-    ;; to handle edge cas where the settlement transaction was broadcast but was not mined in the first block
+    ;; to handle edge case where the settlement transaction was broadcast but was not mined in the first block
     (asserts! 
       (not (is-eq 
         (stx-get-balance CONTRACT_ADDRESS)
