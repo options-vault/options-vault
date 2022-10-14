@@ -15,6 +15,8 @@
 (define-constant ERR_AUCTION_CLOSED (err u118))
 (define-constant ERR_OPTIONS_SOLD_OUT (err u119))
 (define-constant ERR_TOKEN_ID_NOT_IN_EXPIRY_RANGE (err u120)) ;; TODO: Still needed?
+(define-constant ERR_PROCESS_DEPOSITS (err u121))
+(define-constant ERR_PROCESS_WITHDRAWALS (err u122))
 
 (define-data-var contract-owner principal tx-sender)
 
@@ -99,10 +101,9 @@
 		(if (and current-cycle-expired settlement-tx-mined)
 			(begin
 				(try! (contract-call? .vault distribute-pnl))
-				;; (try! (contract-call? .vault process-deposits-withdrawals))
+				(unwrap! (contract-call? .vault process-deposits) ERR_PROCESS_DEPOSITS)
+				(unwrap! (contract-call? .vault process-withdrawals) ERR_PROCESS_WITHDRAWALS)
 				(unwrap! (init-next-cycle) ERR_CYCLE_INIT_FAILED) 
-				;; TODO: Why can't I use try! here instead of unwrap!?
-				;; Alternative: (unwrap-panic (init-next-cycle)) - which one is better and why?
 			)
 			true
 		)
