@@ -10,8 +10,8 @@ Clarinet.test({
         const wallet_2 = accounts.get('wallet_2')?.address ?? ""
         let block = createTwoDepositorsAndProcess(chain, accounts)
 
-        block.receipts[0].events.expectSTXTransferEvent(1000, wallet_1, vaultContract)
-        block.receipts[1].events.expectSTXTransferEvent(2000, wallet_2, vaultContract)
+        block.receipts[0].events.expectSTXTransferEvent(1000000, wallet_1, vaultContract)
+        block.receipts[1].events.expectSTXTransferEvent(2000000, wallet_2, vaultContract)
         block.receipts[2].result.expectOk();
         // TODO check contract balance
         //console.log(block.receipts[0].events[0])
