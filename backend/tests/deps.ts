@@ -2,7 +2,7 @@ export { Clarinet, Tx, Chain, types } from 'https://deno.land/x/clarinet@v1.0.3/
 export type { Account, Block } from 'https://deno.land/x/clarinet@v1.0.3/index.ts';
 export { assertEquals } from 'https://deno.land/std@0.90.0/testing/asserts.ts';
 
-import { types } from 'https://deno.land/x/clarinet@v1.0.3/index.ts';
+import { types, Tx, Chain, Account} from 'https://deno.land/x/clarinet@v1.0.3/index.ts';
 
 export type PricePackage = {
 	prices: { symbol: string, value: any }[],
@@ -11,6 +11,18 @@ export type PricePackage = {
 
 export function shiftPriceValue(value: number) {
 	return Math.round(value * (10 ** 8))
+}
+
+export function CreateTwoDepositorsAndProcess(chain: Chain, accounts: Map<string, Account>) {
+    const wallet_1 = accounts.get('wallet_1')?.address ?? ""
+    const wallet_2 = accounts.get('wallet_2')?.address ?? ""
+
+    let block = chain.mineBlock([
+        Tx.contractCall("vault", "queue-deposit", [types.uint(1000)], wallet_1),
+        Tx.contractCall("vault", "queue-deposit", [types.uint(2000)], wallet_2),
+        Tx.contractCall("vault", "process-deposits", [], wallet_1)
+    ]);
+    return block
 }
 
 export function stringToUint8Array(input: string) {
