@@ -5,9 +5,16 @@ import axiod from "https://deno.land/x/axiod@0.26.2/mod.ts";
 import { redstoneDataOneMinApart } from "./redstone-data.ts";
 import { createTwoDepositorsAndProcess, initAuction, initMint } from "./init.ts";
 
+const contractOwner = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM"
+const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
+const optionsNFTContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.options-nft";
+
+
 const firstRedstoneTimestamp = redstoneDataOneMinApart[0].timestamp; // timestamp 1/10
 const midRedstoneTimestamp = redstoneDataOneMinApart[4].timestamp; // timestamp 5/10
 const lastRedstoneTimestamp = redstoneDataOneMinApart[9].timestamp; // timestamp 10/10
+
+const usdPricingMultiplier = 0.02
 
 const trustedOraclePubkey = "0x035ca791fed34bf9e9d54c0ce4b9626e1382cf13daa46aa58b657389c24a751cc6";
 const untrustedOraclePubkey = "0x03cd2cfdbd2ad9332828a7a13ef62cb999e063421c708e863a7ffed71fb61c88c9";
@@ -119,7 +126,7 @@ Clarinet.test({
 	},
 });
 
-
+// Testing auction initalization outside of init-next-cycle
 
 Clarinet.test({
 	name: "Ensure that the options-nft auction is properly initialized",
@@ -187,6 +194,8 @@ Clarinet.test({
 	},
 });
 
+// Testing mint function
+
 Clarinet.test({
 	name: "Ensure that the mint function works for the right inputs",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
@@ -207,14 +216,37 @@ Clarinet.test({
 			redstoneDataOneMinApart
 		)
 
+		const stxPriceA = chain.callReadOnlyFn(
+			"options-nft",
+			"usd-to-stx",
+			[
+				types.uint(shiftPriceValue(usdPricingMultiplier * redstoneDataOneMinApart[0].value)),
+				types.uint(shiftPriceValue(redstoneDataOneMinApart[0].value))
+			],
+			deployer.address
+		)
+		assertEquals(stxPriceA.result, types.uint(2000000))
+
+		const stxPriceB = chain.callReadOnlyFn(
+			"options-nft",
+			"usd-to-stx",
+			[
+				types.uint(shiftPriceValue(usdPricingMultiplier * redstoneDataOneMinApart[0].value)),
+				types.uint(shiftPriceValue(redstoneDataOneMinApart[1].value))
+			],
+			deployer.address
+		)
+		assertEquals(stxPriceB.result, types.uint(2013262))
+
 		assertEquals(block.receipts.length, 2);
-		// TODO Refactor to use expectSTXTransferEvent() and expectNonFungibleTokenMintEvent()
+		// TODO Refactor to use expectNonFungibleTokenMintEvent()
 		block.receipts[0].result.expectOk().expectUint(1)
-		assertEquals(block.receipts[0].events[0].type, "stx_transfer_event")
+		block.receipts[0].events.expectSTXTransferEvent(2000000, accountA.address, vaultContract)
+		// block.receipts[0].events.expectNonFungibleTokenMintEvent(types.uint(1), accountA.address, contractOwner, '.options-nft')
 		assertEquals(block.receipts[0].events[1].type, "nft_mint_event")
 
 		block.receipts[1].result.expectOk().expectUint(2)
-		assertEquals(block.receipts[1].events[0].type, "stx_transfer_event")
+		block.receipts[1].events.expectSTXTransferEvent(2013262, accountB.address, vaultContract)
 		assertEquals(block.receipts[1].events[1].type, "nft_mint_event")
 	},
 });

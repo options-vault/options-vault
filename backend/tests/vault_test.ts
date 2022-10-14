@@ -30,6 +30,7 @@ Clarinet.test({
         // console.log(wallet_3)
         // console.log(wallet_1)
 
+        // TODO: This is great - each of the contractCalls should ideally be their own test
         block = chain.mineBlock([
             // random tries to withdraw, should fail
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000)], wallet_3),
