@@ -206,7 +206,7 @@ function initOutofMoneyAuction(chain: Chain, deployerAddress: string): Block {
 		Tx.contractCall(
 			"options-nft", 
 			"set-options-for-sale", 
-			[types.uint(10)],
+			[types.uint(3)],
 			deployerAddress
 		),
 	]);
@@ -308,6 +308,14 @@ function initMint(chain: Chain, minterAddressA: string, minterAddressB: string):
 
 Clarinet.test({
 	name: "Ensure that the options-nft auction is properly initialized",
+	async fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer] = ["deployer"].map(who => accounts.get(who)!);
+		initOutofMoneyAuction(chain, deployer.address);
+	},
+});
+
+Clarinet.test({
+	name: "Ensure that the mint function works for the right inputs",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 		initOutofMoneyAuction(chain, deployer.address);

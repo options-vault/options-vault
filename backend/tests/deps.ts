@@ -18,8 +18,8 @@ export function CreateTwoDepositorsAndProcess(chain: Chain, accounts: Map<string
     const wallet_2 = accounts.get('wallet_2')?.address ?? ""
 
     let block = chain.mineBlock([
-        Tx.contractCall("vault", "queue-deposit", [types.uint(1000)], wallet_1),
-        Tx.contractCall("vault", "queue-deposit", [types.uint(2000)], wallet_2),
+        Tx.contractCall("vault", "queue-deposit", [types.uint(1000000)], wallet_1),
+        Tx.contractCall("vault", "queue-deposit", [types.uint(2000000)], wallet_2),
         Tx.contractCall("vault", "process-deposits", [], wallet_1)
     ]);
     return block
