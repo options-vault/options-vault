@@ -4,17 +4,17 @@
 ;; (impl-trait 'SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.nft-trait.nft-trait)
 
 ;; TODO: Clean up error codes
-(define-constant ERR_NOT_CONTRACT_OWNER (err u100))
-(define-constant ERR_UNTRUSTED_ORACLE (err u101))
-(define-constant ERR_STALE_RATE (err u102))
-(define-constant ERR_NO_KNOWN_PRICE (err u103))
-(define-constant ERR_NOT_TOKEN_OWNER (err u104))
-(define-constant ERR_OPTION_NOT_EXPIRED (err u105))
-(define-constant ERR_NO_INFO_FOR_EXPIRY (err u106))
-(define-constant ERR_CYCLE_INIT_FAILED (err u107))
-(define-constant ERR_AUCTION_CLOSED (err u108))
-(define-constant ERR_OPTIONS_SOLD_OUT (err u109))
-(define-constant ERR_TOKEN_ID_NOT_IN_EXPIRY_RANGE (err u110)) ;; TODO: Still needed?
+(define-constant ERR_NOT_CONTRACT_OWNER (err u110))
+(define-constant ERR_UNTRUSTED_ORACLE (err u111))
+(define-constant ERR_STALE_RATE (err u112))
+(define-constant ERR_NO_KNOWN_PRICE (err u113))
+(define-constant ERR_NOT_TOKEN_OWNER (err u114))
+(define-constant ERR_OPTION_NOT_EXPIRED (err u115))
+(define-constant ERR_NO_INFO_FOR_EXPIRY (err u116))
+(define-constant ERR_CYCLE_INIT_FAILED (err u117))
+(define-constant ERR_AUCTION_CLOSED (err u118))
+(define-constant ERR_OPTIONS_SOLD_OUT (err u119))
+(define-constant ERR_TOKEN_ID_NOT_IN_EXPIRY_RANGE (err u120)) ;; TODO: Still needed?
 
 (define-data-var contract-owner principal tx-sender)
 
@@ -96,7 +96,7 @@
 			true
 		)
 
-		(if settlement-tx-mined
+		(if (and current-cycle-expired settlement-tx-mined)
 			(begin
 				(try! (contract-call? .vault distribute-pnl))
 				;; (try! (contract-call? .vault process-deposits-withdrawals))
@@ -429,4 +429,12 @@
 		stxusd-rate (ok (usd-to-stx (get-usd-price) stxusd-rate))
 		ERR_NO_KNOWN_PRICE
 	)
+)
+
+(define-read-only (get-last-seen-timestamp) 
+	(var-get last-seen-timestamp)
+)
+
+(define-read-only (get-last-stxusd-rate) 
+	(var-get last-stxusd-rate)
 )

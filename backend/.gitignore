@@ -5,3 +5,4 @@
 history.txt
 server/node_modules
 server/package-lock.json
+.cache
