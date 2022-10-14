@@ -93,7 +93,8 @@
 		(var-set last-stxusd-rate (get value (element-at (filter is-stxusd entries) u0))) ;; TODO: check if stxusd is always the first entry in the list after filtering
 		(var-set last-seen-timestamp timestamp)		
 
-		(if current-cycle-expired 
+		
+		(if current-cycle-expired
 			(try! (end-current-cycle))
 			true
 		)
