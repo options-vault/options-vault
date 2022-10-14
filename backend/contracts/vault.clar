@@ -82,6 +82,7 @@
 ;; DEPOSITS FUNCTIONS
 
 ;; <process-deposits>: Traverses investor-addresses list applying process-deposits-updater function to update the balance of each investor
+;; TODO: Only allow options-nft contract to call this function
 (define-public (process-deposits)
   (begin
     (map process-deposits-updater (var-get investor-addresses))

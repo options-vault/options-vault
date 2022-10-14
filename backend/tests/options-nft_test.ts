@@ -3,6 +3,7 @@ import { Clarinet, Tx, Chain, Account, types, assertEquals, shiftPriceValue, lit
 import type { PricePackage, Block } from "./deps.ts";
 import axiod from "https://deno.land/x/axiod@0.26.2/mod.ts";
 import { redstoneDataOneMinApart } from "./redstone-data.ts";
+import { createTwoDepositorsAndProcess, initAuction, initMint } from "./init.ts";
 
 const firstRedstoneTimestamp = redstoneDataOneMinApart[0].timestamp; // timestamp 1/10
 const midRedstoneTimestamp = redstoneDataOneMinApart[4].timestamp; // timestamp 5/10
@@ -120,109 +121,37 @@ Clarinet.test({
 
 
 
+Clarinet.test({
+	name: "Ensure that the options-nft auction is properly initialized",
+	async fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer] = ["deployer"].map(who => accounts.get(who)!);
+		const block = initAuction(
+			chain, 
+			deployer.address,
+			firstRedstoneTimestamp - 10, 
+			midRedstoneTimestamp + 10, 
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
 
-
-
-// Clarinet.test({
-//     name: "Ensure that can start auction with submit price data",
-//     async fn(chain: Chain, accounts: Map<string, Account>) {
-
-//         const wallet_1 = accounts.get('wallet_1')?.address ?? ""
-//         //const deployer = accounts.get('deployer')?.address ?? ""
-
-
-//         let redstone_response = { timestamp: 0, liteEvmSignature:"", value:0}
-
-//         await axiod.get("https://api.redstone.finance/prices?symbol=STX&provider=redstone").then((response) => {
-//             redstone_response = response.data[0]
-//         });
-
-//         console.log(redstone_response)
-
-// 		const pricePackage: PricePackage = {
-// 			timestamp: redstone_response.timestamp,
-// 			prices: [{ symbol: "STX", value: redstone_response.value }]
-// 		}
-// 		const packageCV = pricePackageToCV(pricePackage);
-
-
-// 		let block = chain.mineBlock([
-// 			Tx.contractCall("options-nft", "submit-price-data", [
-// 				packageCV.timestamp,
-// 				packageCV.prices,
-// 				types.buff(liteSignatureToStacksSignature(redstone_response.liteEvmSignature))
-// 			], wallet_1)
-// 		]);
-
-//         console.log(block.receipts)
-//     },
-// });
-
-// Note: auction-decrement-value is not being set
-function initOutofMoneyAuction(chain: Chain, deployerAddress: string): Block {
-	
-	// Set current-cycle-expiry to midRestoneTimestamp + 10 milliseconds
-	let block = chain.mineBlock([
-		Tx.contractCall(
-			"options-nft", 
-			"set-current-cycle-expiry", 
-			[types.uint(midRedstoneTimestamp + 10)], 
-			deployerAddress
-		),
-	]);
-	assertEquals(block.receipts.length, 1);
+	assertEquals(block.receipts.length, 5);
 	assertEquals(block.height, 2);
-	block.receipts[0].result.expectOk().expectBool(true)
-	
-	// Read current-cycle-expiry from the contract and assertEquals
+	block.receipts.forEach(el => el.result.expectOk().expectBool(true))
+
 	const currentCycleExpiry = chain.callReadOnlyFn(
 		"options-nft",
 		"get-current-cycle-expiry",
 		[],
-		deployerAddress
+		deployer.address
 	)
 	assertEquals(currentCycleExpiry.result, types.utf8(midRedstoneTimestamp + 10))
-
-	// Initialize the auction by making an entry into the options-ledger, setting the price and start-time
-	block = chain.mineBlock([
-		Tx.contractCall(
-			"options-nft", 
-			"set-options-ledger-entry", 
-			[types.uint(shiftPriceValue(redstoneDataOneMinApart[0].value * 1.15))], // strike = spot + 15% 
-			deployerAddress
-		),
-		Tx.contractCall(
-			"options-nft", 
-			"set-options-price-in-usd", 
-			[types.uint(shiftPriceValue(redstoneDataOneMinApart[0].value * 0.02))], // options-price = spot * 0.5% 
-			deployerAddress
-		),
-		Tx.contractCall(
-			"options-nft", 
-			"set-auction-start-time", 
-			[types.uint(firstRedstoneTimestamp - 10)], // Fri Oct 14 2022 16:10:54 GMT+0000
-			deployerAddress
-		),
-		Tx.contractCall(
-			"options-nft", 
-			"set-options-for-sale", 
-			[types.uint(10)],
-			deployerAddress
-		),
-	]);
-	assertEquals(block.receipts.length, 4);
-	assertEquals(block.height, 3);
-	block.receipts[0].result.expectOk().expectBool(true)
-	block.receipts[1].result.expectOk().expectBool(true)
-	block.receipts[2].result.expectOk().expectBool(true)
-	block.receipts[3].result.expectOk().expectBool(true)
 
 	// Check if the strike was properly set in the options-ledger
 	const strikeOptionsLedgerEntry = chain.callReadOnlyFn(
 		"options-nft",
 		"get-strike-for-expiry",
 		[types.uint(midRedstoneTimestamp + 10)],
-		deployerAddress
+		deployer.address
 	)
 	assertEquals(strikeOptionsLedgerEntry.result.expectOk(), types.uint(shiftPriceValue(redstoneDataOneMinApart[0].value * 1.15)))
 
@@ -230,7 +159,7 @@ function initOutofMoneyAuction(chain: Chain, deployerAddress: string): Block {
 		"options-nft",
 		"get-options-price-in-usd",
 		[],
-		deployerAddress
+		deployer.address
 	)
 	assertEquals(optionsPrice.result.expectSome(), types.utf8(shiftPriceValue(redstoneDataOneMinApart[0].value * 0.02)))
 
@@ -238,7 +167,7 @@ function initOutofMoneyAuction(chain: Chain, deployerAddress: string): Block {
 		"options-nft",
 		"get-auction-start-time",
 		[],
-		deployerAddress
+		deployer.address
 	)
 	assertEquals(auctionStartTime.result, types.utf8(firstRedstoneTimestamp - 10))
 
@@ -246,71 +175,47 @@ function initOutofMoneyAuction(chain: Chain, deployerAddress: string): Block {
 		"options-nft",
 		"get-options-for-sale",
 		[],
-		deployerAddress
+		deployer.address
 	)
-	assertEquals(optionsForSale.result, types.uint(10))
+	assertEquals(optionsForSale.result, types.uint(3))
 
-	console.log('strike', strikeOptionsLedgerEntry.result.expectOk())
-	console.log('price', optionsPrice.result.expectSome())
-	console.log('auction-start-time', auctionStartTime.result)
-	console.log('options-for-sale', optionsForSale.result)
-	console.log('expiry', currentCycleExpiry.result)
-}
-
-function initMint(chain: Chain, minterAddressA: string, minterAddressB: string): Block {
-	const pricePackageA: PricePackage = {
-		timestamp: redstoneDataOneMinApart[0].timestamp,
-		prices: [{ symbol: "STX", value: redstoneDataOneMinApart[0].value }]
-	}
-	const packageCVA = pricePackageToCV(pricePackageA);
-	const signatureA = types.buff(liteSignatureToStacksSignature(redstoneDataOneMinApart[0].liteEvmSignature))
-
-	const pricePackageB: PricePackage = {
-		timestamp: redstoneDataOneMinApart[1].timestamp,
-		prices: [{ symbol: "STX", value: redstoneDataOneMinApart[1].value }]
-	}
-	const packageCVB = pricePackageToCV(pricePackageB);
-	const signatureB = types.buff(liteSignatureToStacksSignature(redstoneDataOneMinApart[1].liteEvmSignature))
-	
-	let block = chain.mineBlock([
-		Tx.contractCall(
-			"options-nft",
-			"mint",
-			[
-				packageCVA.timestamp,
-				packageCVA.prices,
-				signatureA	
-			],
-			minterAddressA
-		),
-		Tx.contractCall(
-			"options-nft",
-			"mint",
-			[
-				packageCVB.timestamp,
-				packageCVB.prices,
-				signatureB	
-			],
-			minterAddressB
-		)
-	]);
-	assertEquals(block.receipts.length, 2);
-	// TODO Refactor to use expectSTXTransferEvent() and expectNonFungibleTokenMintEvent()
-	block.receipts[0].result.expectOk().expectUint(1)
-	assertEquals(block.receipts[0].events[0].type, "stx_transfer_event")
-	assertEquals(block.receipts[0].events[1].type, "nft_mint_event")
-
-	block.receipts[1].result.expectOk().expectUint(2)
-	assertEquals(block.receipts[1].events[0].type, "stx_transfer_event")
-	assertEquals(block.receipts[1].events[1].type, "nft_mint_event")
-}
-
-
-Clarinet.test({
-	name: "Ensure that the options-nft auction is properly initialized",
-	async fn(chain: Chain, accounts: Map<string, Account>) {
-		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
-		initOutofMoneyAuction(chain, deployer.address);
-		initMint(chain, accountA.address, accountB.address)
+	// console.log('strike', strikeOptionsLedgerEntry.result.expectOk())
+	// console.log('price', optionsPrice.result.expectSome())
+	// console.log('auction-start-time', auctionStartTime.result)
+	// console.log('options-for-sale', optionsForSale.result)
+	// console.log('expiry', currentCycleExpiry.result)
 	},
 });
+
+Clarinet.test({
+	name: "Ensure that the mint function works for the right inputs",
+	async fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+		let block = initAuction(
+			chain, 
+			deployer.address,
+			firstRedstoneTimestamp - 10, 
+			midRedstoneTimestamp + 10, 
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);		
+		
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+
+		assertEquals(block.receipts.length, 2);
+		// TODO Refactor to use expectSTXTransferEvent() and expectNonFungibleTokenMintEvent()
+		block.receipts[0].result.expectOk().expectUint(1)
+		assertEquals(block.receipts[0].events[0].type, "stx_transfer_event")
+		assertEquals(block.receipts[0].events[1].type, "nft_mint_event")
+
+		block.receipts[1].result.expectOk().expectUint(2)
+		assertEquals(block.receipts[1].events[0].type, "stx_transfer_event")
+		assertEquals(block.receipts[1].events[1].type, "nft_mint_event")
+	},
+});
+
