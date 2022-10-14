@@ -13,15 +13,19 @@
 (define-constant ONLY_CONTRACT_ALLOWED (err u104))
 (define-constant HAS_TO_WAIT_UNTIL_NEXT_BLOCK (err u105))
 (define-constant TX_NOT_APPLIED_YET (err u106))
+(define-constant PREMIUM_NOT_SPLITTED_CORRECTLY (err u107))
 
 ;; data maps and vars
 
 ;; Ledger map to store balances and withdraw/deposit requests for each principal (investor type / vault)
 (define-map ledger principal { address: principal, balance: uint, pending-deposits: uint, pending-withdraw: uint })
 
-(define-data-var investors-address (list 1000 principal) (list))
+(define-data-var investor-addresses (list 1000 principal) (list))
 
 (define-data-var total-balances uint u0)
+(define-data-var temp-total-balances uint u0)
+
+(define-data-var total-pending-deposits uint u0)
 
 (define-data-var block-height-settlement uint u0)
 
@@ -68,48 +72,47 @@
   (+ (get-pending-withdraw) amount)
 )
 
-;; Update investors-address list - helper function
+;; Update investor-addresses list - helper function
 (define-private (add-to-list (investor principal))
-  (var-set investors-address (unwrap-panic (as-max-len? (append (var-get investors-address) investor) u1000)))
+  (var-set investor-addresses (unwrap-panic (as-max-len? (append (var-get investor-addresses) investor) u1000)))
 )
 
 ;; public functions
-;;
-;; TO DO:
-;; 1. When cases 2 o 3 are executed at the end of the cycle
-;; 1.1 For case 3 transfer all the premium + earnings to the user 2
-;; 1.2 For case 2 transfer part of the premium to the user 2 and the other part to the vault
-;; 2. When the vault earns premium from case 1 or 2
 
-;; 1. Deposit function as investor
-;; Q: Can the deployer contract invest?
-(define-public (deposit-investor) 
-  (let (
-          (sender-info (unwrap! (map-get? ledger tx-sender) TX_SENDER_NOT_IN_LEDGER))
-          (pending-deposit (get-pending-deposit))
+;; DEPOSITS FUNCTIONS
+
+;; <process-deposits>: Traverses investor-addresses list applying process-deposits-updater function to update the balance of each investor
+(define-public (process-deposits)
+  (begin
+    (map process-deposits-updater (var-get investor-addresses))
+    (ok true)
+  )
+)
+;; <process-deposits-updater>: Adds the pending-deposit amount (and resets it) to balance amount for each investor in the ledger,
+;;                             also adds this amount to total-balances
+(define-private (process-deposits-updater (investor principal)) 
+  (let  (
+          (investor-info (unwrap-panic (map-get? ledger investor)))
+          (investor-balance (get balance investor-info))
+          (investor-pending-deposit (get pending-deposits investor-info))
         )
-        (asserts! (> pending-deposit u0) INVALID_AMOUNT)
-        (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
-        (try! (stx-transfer? pending-deposit tx-sender CONTRACT_ADDRESS))
-        (var-set total-balances (+ (var-get total-balances) pending-deposit))
         (map-set ledger
-          tx-sender 
-          (merge
-            sender-info
+          investor
+          (merge 
+            investor-info
             {
               balance: 
-                (add-to-balance pending-deposit),
+                (+ investor-balance investor-pending-deposit),
               pending-deposits:
-                (substract-pending-deposit pending-deposit)
+                u0
             }
           )
         )
-        (ok true)
+        (var-set total-balances (+ (var-get total-balances) investor-pending-deposit))
   )
 )
 
-;; 2. deposit function as premium (vault)
-
+;; <deposit-premium>: Transfers the premium that comes from an user2 type when buys an option NFT
 (define-public (deposit-premium (amount uint) (original-sender principal)) 
   (begin
     (asserts! (> amount u0) INVALID_AMOUNT)
@@ -119,11 +122,14 @@
   )
 )
 
-;; TODO: Send deposited funds to vault contract
+;; <queue-deposit>: Transfers a deposit amount from an investor user to the vault contract and adds this amount to pending-deposit
+;;                  property under the investor address key found in the ledger, if it is a new investor, the function creates a new investor in the ledger
+;;                  Also adds the investor address in investor-address list, if it is a new one, and increments total-pending-deposits by the amount deposited
 (define-public (queue-deposit (amount uint)) 
   (begin
     (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
     (asserts! (> amount u0) INVALID_AMOUNT)
+    (try! (stx-transfer? amount tx-sender CONTRACT_ADDRESS))
     (if (map-insert ledger 
           tx-sender
           {
@@ -145,48 +151,76 @@
         )
       )
     )
+    (var-set total-pending-deposits (+ (var-get total-pending-deposits) amount))
     (ok true)     
   )
 )
 
-;; 3. withdraw function
-(define-public (withdraw)
+;; WITHDRAWAL FUNCTIONS
+
+;; <process-withdrawals>: Traverses investor-addresses list applying process-withdrawals-updater function to execute the withdrawal
+;;                        requested by each investor.
+(define-public (process-withdrawals)
+  (begin
+    (map process-withdrawals-updater (var-get investor-addresses))
+    (ok true)
+  )
+)
+
+;; <process-withdrawals-updater>: Substracts the pending-withdraw amount (and resets it) from balance amount for each investor in the ledger
+;;                                and make a transfer of the pending-withdraw amount from the vaul contract to the investor's address, but 
+;;                                only if there is some conditions true, also substracts this amount from total-balances to keep this variable 
+;;                                updated.
+(define-private (process-withdrawals-updater (investor principal)) 
   (let  (
-          (balance (unwrap! (get-balance) TX_SENDER_NOT_IN_LEDGER))
-          (pending-withdraw (get-pending-withdraw))
-          (sender-info (unwrap-panic (map-get? ledger tx-sender)))
+          (investor-info (unwrap-panic (map-get? ledger investor)))
+          (investor-balance (get balance investor-info))
+          (investor-pending-withdrawal (get pending-withdraw investor-info))
+          (investor-address (get address investor-info))
         )
-        (asserts! (>= balance pending-withdraw) INSUFFICIENT_FUNDS)
-        (asserts! (> pending-withdraw u0) INVALID_AMOUNT)
-        (try! (as-contract (stx-transfer? pending-withdraw tx-sender (get address sender-info))))
-        (var-set total-balances (- (var-get total-balances) pending-withdraw))
-        (map-set ledger
-          tx-sender
-          (merge
-            sender-info
-            {
-              balance: 
-                (substract-to-balance pending-withdraw),
-              pending-withdraw:
-                (substract-pending-withdraw pending-withdraw)
-            }  
-          )
+        (if (and 
+              (>= investor-balance investor-pending-withdrawal)
+              (> investor-pending-withdrawal u0)
+            )
+            ;; if investor's balance is equal or greater than its pending-withdraw amount
+            ;; and investor's pending-withdraw amount is greater than 0
+            (begin 
+              (try! (as-contract (stx-transfer? investor-pending-withdrawal tx-sender investor-address)))
+              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
+              (map-set ledger
+                tx-sender
+                (merge
+                  investor-info
+                  {
+                    balance: 
+                      (substract-to-balance investor-pending-withdrawal),
+                    pending-withdraw:
+                      u0
+                  }  
+                )
+              )
+              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
+            )
+            ;; if false just pass
+            true
         )
         (ok true)
   )
 )
 
-(define-public (queue-withdraw (amount uint)) 
+;; <queue-withdrawal>: Adds the amount to pending-withdraw amount for the investor in the ledger that wants to request a withdrawal
+;;                     which will be executed at the end of the current cycle
+(define-public (queue-withdrawal (amount uint)) 
   (let  (
-          (balance (unwrap! (get-balance) TX_SENDER_NOT_IN_LEDGER))
-          (pending-withdraw (get-pending-withdraw))
-          (sender-info (unwrap-panic (map-get? ledger tx-sender)))
+          (investor-balance (unwrap! (get-balance) TX_SENDER_NOT_IN_LEDGER))
+          (investor-pending-withdrawal (get-pending-withdraw))
+          (investor-info (unwrap-panic (map-get? ledger tx-sender)))
         )
-        (asserts! (>= balance (+ pending-withdraw amount)) INSUFFICIENT_FUNDS)
+        (asserts! (>= investor-balance (+ investor-pending-withdrawal amount)) INSUFFICIENT_FUNDS)
         (map-set ledger  
           tx-sender
           (merge 
-            sender-info
+            investor-info
             {
               pending-withdraw:
                 (add-pending-withdraw amount) 
@@ -197,29 +231,9 @@
   )
 )
 
-;; Distribute the premium between all the investor in the vault (depending of their participation rate)
-;; TODO: Update total-balances in line with the updates to the individual investor's balance
-;; TODO: Implement check that after distributor has run total-balances = vault-balance
-(define-private (evaluator (investor principal)) 
-  (let  (
-          (total-balance (var-get total-balances))
-          (vault-balance (stx-get-balance CONTRACT_ADDRESS)) ;; - pending_deposits 
-          (investor-info (unwrap-panic (map-get? ledger investor)))
-          (investor-balance (get balance investor-info))
-        )
-        (map-set ledger
-          investor
-          (merge 
-            investor-info
-            {
-              balance: 
-                (/ (* investor-balance vault-balance) total-balance)
-            }
-          )
-        )
-  )
-)
+;; PNL FUNCTIONS
 
+;;<distribute-pnl>: Distributes the premium between all the investor in the vault according to their participation rate
 (define-public (distribute-pnl)
   (begin
     ;; (asserts! (is-eq CONTRACT_ADDRESS tx-sender) ONLY_CONTRACT_ALLOWED)
@@ -233,8 +247,35 @@
       ))
       TX_NOT_APPLIED_YET
     )
-    (map evaluator (var-get investors-address))
+    (var-set temp-total-balances (var-get total-balances))
+    (map pnl-evaluator (var-get investor-addresses))
+    (asserts! (is-eq (var-get total-balances) (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits))) PREMIUM_NOT_SPLITTED_CORRECTLY)
     (ok true)
+  )
+)
+
+;;<pnl-evaluator>: Calculates the pnl for each investor's participation in the vault, updates its balance and updates the total-balances
+;;                 that summarize all the investor's balances in the ledger 
+(define-private (pnl-evaluator (investor principal)) 
+  (let  (
+          (total-balance (var-get total-balances))
+          (temp-total-balance (var-get temp-total-balances))
+          (vault-balance (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits))) 
+          (investor-info (unwrap-panic (map-get? ledger investor)))
+          (investor-balance (get balance investor-info))
+          (investor-new-balance (/ (* investor-balance vault-balance) temp-total-balance))
+        )
+        (map-set ledger
+          investor
+          (merge 
+            investor-info
+            {
+              balance: 
+                investor-new-balance
+            }
+          )
+        )
+        (var-set total-balances (+ (- total-balance investor-balance) investor-new-balance))
   )
 )
 
@@ -244,10 +285,10 @@
 )
 
 (define-read-only (get-investors-list) 
-  (var-get investors-address)
+  (var-get investor-addresses)
 )
 
-;; TX to sttlement contract what is owed to users2 type
+;; TX to settlement contract what is owed to users2 type
 ;; #[allow(unchecked_data)]
 (define-public (create-settlement-pool (amount uint) (settlement-contract principal))
   (begin
@@ -257,3 +298,5 @@
     (ok true)
   )
 )
+
+;; vault-balance = total-balances + premiums + total-pending-deposits
