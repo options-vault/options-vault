@@ -13,6 +13,7 @@
 (define-constant ONLY_CONTRACT_ALLOWED (err u104))
 (define-constant HAS_TO_WAIT_UNTIL_NEXT_BLOCK (err u105))
 (define-constant TX_NOT_APPLIED_YET (err u106))
+(define-constant PREMIUM_NOT_SPLITTED_CORRECTLY (err u107))
 
 ;; data maps and vars
 
@@ -230,29 +231,9 @@
   )
 )
 
-;; Distribute the premium between all the investor in the vault (depending of their participation rate)
-;; TODO: Update total-balances in line with the updates to the individual investor's balance
-;; TODO: Implement check that after distributor has run total-balances = vault-balance
-(define-private (evaluator (investor principal)) 
-  (let  (
-          (total-balance (var-get total-balances))
-          (vault-balance (stx-get-balance CONTRACT_ADDRESS)) ;; - pending_deposits 
-          (investor-info (unwrap-panic (map-get? ledger investor)))
-          (investor-balance (get balance investor-info))
-        )
-        (map-set ledger
-          investor
-          (merge 
-            investor-info
-            {
-              balance: 
-                (/ (* investor-balance vault-balance) total-balance)
-            }
-          )
-        )
-  )
-)
+;; PNL FUNCTIONS
 
+;;<distribute-pnl>: Distributes the premium between all the investor in the vault according to their participation rate
 (define-public (distribute-pnl)
   (begin
     ;; (asserts! (is-eq CONTRACT_ADDRESS tx-sender) ONLY_CONTRACT_ALLOWED)
@@ -267,8 +248,34 @@
       TX_NOT_APPLIED_YET
     )
     (var-set temp-total-balances (var-get total-balances))
-    (map evaluator (var-get investor-addresses))
+    (map pnl-evaluator (var-get investor-addresses))
+    (asserts! (is-eq (var-get total-balances) (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits))) PREMIUM_NOT_SPLITTED_CORRECTLY)
     (ok true)
+  )
+)
+
+;;<pnl-evaluator>: Calculates the pnl for each investor's participation in the vault, updates its balance and updates the total-balances
+;;                 that summarize all the investor's balances in the ledger 
+(define-private (pnl-evaluator (investor principal)) 
+  (let  (
+          (total-balance (var-get total-balances))
+          (temp-total-balance (var-get temp-total-balances))
+          (vault-balance (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits))) 
+          (investor-info (unwrap-panic (map-get? ledger investor)))
+          (investor-balance (get balance investor-info))
+          (investor-new-balance (/ (* investor-balance vault-balance) temp-total-balance))
+        )
+        (map-set ledger
+          investor
+          (merge 
+            investor-info
+            {
+              balance: 
+                investor-new-balance
+            }
+          )
+        )
+        (var-set total-balances (+ (- total-balance investor-balance) investor-new-balance))
   )
 )
 
@@ -291,3 +298,5 @@
     (ok true)
   )
 )
+
+;; vault-balance = total-balances + premiums + total-pending-deposits
