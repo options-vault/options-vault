@@ -87,7 +87,8 @@
     (ok true)
   )
 )
-;; <process-deposits-updater>: Adds the pending-deposit amount (and resets it) to balance amount for each investor in the ledger
+;; <process-deposits-updater>: Adds the pending-deposit amount (and resets it) to balance amount for each investor in the ledger,
+;;                             also adds this amount to total-balances
 (define-private (process-deposits-updater (investor principal)) 
   (let  (
           (investor-info (unwrap-panic (map-get? ledger investor)))
@@ -106,6 +107,7 @@
             }
           )
         )
+        (var-set total-balances (+ (var-get total-balances) investor-pending-deposit))
   )
 )
 
@@ -120,8 +122,8 @@
 )
 
 ;; <queue-deposit>: Transfers a deposit amount from an investor user to the vault contract and adds this amount to pending-deposit
-;; property under the investor address key found in the ledger, if it is a new investor, the function creates a new investor in the ledger
-;; Also adds the investor address in investor-address list, if it is a new one, and increments total-pending-deposits by the amount deposited
+;;                  property under the investor address key found in the ledger, if it is a new investor, the function creates a new investor in the ledger
+;;                  Also adds the investor address in investor-address list, if it is a new one, and increments total-pending-deposits by the amount deposited
 (define-public (queue-deposit (amount uint)) 
   (begin
     (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
@@ -155,76 +157,69 @@
 
 ;; WITHDRAWAL FUNCTIONS
 
-;; <process-withdrawals>: 
-;; (define-public (process-withdrawals)
-;;   (let  (
-;;           (balance (unwrap! (get-balance) TX_SENDER_NOT_IN_LEDGER))
-;;           (pending-withdraw (get-pending-withdraw))
-;;           (sender-info (unwrap-panic (map-get? ledger tx-sender)))
-;;         )
-;;         (asserts! (>= balance pending-withdraw) INSUFFICIENT_FUNDS)
-;;         (asserts! (> pending-withdraw u0) INVALID_AMOUNT)
-;;         (try! (as-contract (stx-transfer? pending-withdraw tx-sender (get address sender-info))))
-;;         (var-set total-balances (- (var-get total-balances) pending-withdraw))
-;;         (map-set ledger
-;;           tx-sender
-;;           (merge
-;;             sender-info
-;;             {
-;;               balance: 
-;;                 (substract-to-balance pending-withdraw),
-;;               pending-withdraw:
-;;                 (substract-pending-withdraw pending-withdraw)
-;;             }  
-;;           )
-;;         )
-;;         (ok true)
-;;   )
-;; )
-
 ;; <process-withdrawals>: Traverses investor-addresses list applying process-withdrawals-updater function to execute the withdrawal
-;; requested by each investor.
+;;                        requested by each investor.
 (define-public (process-withdrawals)
   (begin
-    (map process-deposits-updater (var-get investor-addresses))
+    (map process-withdrawals-updater (var-get investor-addresses))
     (ok true)
   )
 )
 
-;; <process-deposits-updater>: Adds the pending-deposit amount (and resets it) to balance amount for each investor in the ledger
-;; and make a transfer of the pending-withdraw amount from the vaul contract to the investor's address
+;; <process-withdrawals-updater>: Substracts the pending-withdraw amount (and resets it) from balance amount for each investor in the ledger
+;;                                and make a transfer of the pending-withdraw amount from the vaul contract to the investor's address, but 
+;;                                only if there is some conditions true, also substracts this amount from total-balances to keep this variable 
+;;                                updated.
 (define-private (process-withdrawals-updater (investor principal)) 
   (let  (
           (investor-info (unwrap-panic (map-get? ledger investor)))
           (investor-balance (get balance investor-info))
-          (investor-pending-deposit (get pending-deposits investor-info))
+          (investor-pending-withdrawal (get pending-withdraw investor-info))
+          (investor-address (get address investor-info))
         )
-        (map-set ledger
-          investor
-          (merge 
-            investor-info
-            {
-              balance: 
-                (+ investor-balance investor-pending-deposit),
-              pending-deposits:
-                u0
-            }
-          )
+        (if (and 
+              (>= investor-balance investor-pending-withdrawal)
+              (> investor-pending-withdrawal u0)
+            )
+            ;; if investor's balance is equal or greater than its pending-withdraw amount
+            ;; and investor's pending-withdraw amount is greater than 0
+            (begin 
+              (try! (as-contract (stx-transfer? investor-pending-withdrawal tx-sender investor-address)))
+              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
+              (map-set ledger
+                tx-sender
+                (merge
+                  investor-info
+                  {
+                    balance: 
+                      (substract-to-balance investor-pending-withdrawal),
+                    pending-withdraw:
+                      u0
+                  }  
+                )
+              )
+              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
+            )
+            ;; if false just pass
+            true
         )
+        (ok true)
   )
 )
 
-(define-public (queue-withdraw (amount uint)) 
+;; <queue-withdrawal>: Adds the amount to pending-withdraw amount for the investor in the ledger that wants to request a withdrawal
+;;                     which will be executed at the end of the current cycle
+(define-public (queue-withdrawal (amount uint)) 
   (let  (
-          (balance (unwrap! (get-balance) TX_SENDER_NOT_IN_LEDGER))
-          (pending-withdraw (get-pending-withdraw))
-          (sender-info (unwrap-panic (map-get? ledger tx-sender)))
+          (investor-balance (unwrap! (get-balance) TX_SENDER_NOT_IN_LEDGER))
+          (investor-pending-withdrawal (get-pending-withdraw))
+          (investor-info (unwrap-panic (map-get? ledger tx-sender)))
         )
-        (asserts! (>= balance (+ pending-withdraw amount)) INSUFFICIENT_FUNDS)
+        (asserts! (>= investor-balance (+ investor-pending-withdrawal amount)) INSUFFICIENT_FUNDS)
         (map-set ledger  
           tx-sender
           (merge 
-            sender-info
+            investor-info
             {
               pending-withdraw:
                 (add-pending-withdraw amount) 
@@ -271,6 +266,7 @@
       ))
       TX_NOT_APPLIED_YET
     )
+    (var-set temp-total-balances (var-get total-balances))
     (map evaluator (var-get investor-addresses))
     (ok true)
   )
