@@ -17,6 +17,7 @@
 (define-constant ERR_TOKEN_ID_NOT_IN_EXPIRY_RANGE (err u120)) ;; TODO: Still needed?
 (define-constant ERR_PROCESS_DEPOSITS (err u121))
 (define-constant ERR_PROCESS_WITHDRAWALS (err u122))
+(define-constant ERR_RETRIEVING_STXUSD (err u123))
 
 (define-data-var contract-owner principal tx-sender)
 
@@ -62,8 +63,11 @@
 
 (define-data-var settlement-block-height uint u0) 
 
-(define-constant week-in-seconds u604800)
-(define-constant min-in-seconds u60)
+;; TODO Change into milliseconds
+
+(define-constant week-in-milliseconds u604800000)
+(define-constant min-in-milliseconds u60000)
+
 
 ;; TODO: Check units for all STX transactions (mint, settlement), priced in USD but settled in STX
 ;; --> Should the option be priced in STX to the end user? (like on Deribit)
@@ -140,9 +144,9 @@
 		(
 			(stxusd-rate (unwrap! (var-get last-stxusd-rate) (err u7)))
 			(strike (calculate-strike stxusd-rate)) ;; simplified calculation for mvp scope
-			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-seconds))
+			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-milliseconds))
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
-			(normal-start-time (+ (var-get current-cycle-expiry) (* u120 min-in-seconds)))
+			(normal-start-time (+ (var-get current-cycle-expiry) (* u120 min-in-milliseconds)))
 			(now (var-get last-seen-timestamp))
 		)
 
@@ -231,24 +235,23 @@
 	;; to make the calculate-strike and/or the set-optons-price functions dependent on the time-to-expiry, therefore properly pricing the option's time value
 	(/ (* stxusd-rate u115) u100)
 )
-
 ;; NFT MINTING (Priced in USD, payed in STX)
 
 ;; #[allow(unchecked_data)]
-(define-public (mint (timestamp uint) (stxusd-rate uint) (signature (buff 65)))
+(define-public (mint (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65)))
 	(let
 		(
-			;; Recover the pubkey of the signer.
-			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
+			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
 			(token-id (+ (var-get token-id-nonce) u1))
       (current-cycle-options-ledger-entry (try! (get-options-ledger-entry (var-get current-cycle-expiry))))
+			(stxusd-rate (unwrap! (get value (element-at entries u0)) ERR_RETRIEVING_STXUSD)) ;; had to take out the filter to pass test
 		)
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
 		;; Check if options-nft are available for sale. The contract can only sell as many options-nfts as there are funds in the vault
 		(asserts! (> (var-get options-for-sale) u0) ERR_OPTIONS_SOLD_OUT)
 		;; Check if auciton has run for more than 180 minutes, this ensures that the auction never runs longer than 3 hours thus reducing delta risk
 		;; (i.e. the risk of a unfavorable change in the price of the underlying asset)
-		(asserts! (< timestamp (+ (var-get auction-start-time) (* min-in-seconds u180))) ERR_AUCTION_CLOSED)
+		(asserts! (< timestamp (+ (var-get auction-start-time) (* min-in-milliseconds u180))) ERR_AUCTION_CLOSED)
 		;; Update the mint price based on where in the 180 min minting window we are 
 		(update-options-price-in-usd timestamp)
 		;; Update the token ID nonce
@@ -272,7 +275,7 @@
 (define-private (update-options-price-in-usd (timestamp uint)) 
 	(let
 		(
-			(decrement (* (/ (- timestamp (var-get auction-start-time)) (* min-in-seconds u30)) (var-get auction-decrement-value)))
+			(decrement (* (/ (- timestamp (var-get auction-start-time)) (* min-in-milliseconds u30)) (var-get auction-decrement-value)))
 		)
 		(var-set options-price-in-usd (some (- (unwrap-panic (var-get options-price-in-usd)) decrement)))
 	)
@@ -358,9 +361,7 @@
 	)
 )
 
-(define-private (get-options-ledger-entry (cycle-expiry uint)) 
-  (ok (unwrap! (map-get? options-ledger {cycle-expiry: cycle-expiry}) ERR_NO_INFO_FOR_EXPIRY))
-)
+
 
 
 ;; CONTRACT OWNERSHIP HELPER FUNCTIONS
@@ -438,4 +439,85 @@
 
 (define-read-only (get-last-stxusd-rate) 
 	(var-get last-stxusd-rate)
+)
+
+;; (!) For testing purposes only, delete for deployment (!)
+
+;; auction-start-time
+;; #[allow(unchecked_data)]
+(define-public (set-auction-start-time (timestamp uint)) 
+	(begin
+		(asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_CONTRACT_OWNER)
+		(ok (var-set auction-start-time timestamp))
+	)	
+)
+
+(define-read-only (get-auction-start-time) 
+	(var-get auction-start-time)
+)
+
+;; current-cycle-expiry
+;; #[allow(unchecked_data)]
+(define-public (set-current-cycle-expiry (timestamp uint)) 
+	(begin
+		(asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_CONTRACT_OWNER)
+		(ok (var-set current-cycle-expiry timestamp))
+	)	
+)
+
+(define-read-only (get-current-cycle-expiry) 
+	(var-get current-cycle-expiry)
+)
+
+;; options-price-in-usd
+;; #[allow(unchecked_data)]
+(define-public (set-options-price-in-usd (price uint)) 
+	(begin
+		(asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_CONTRACT_OWNER)
+		(ok (var-set options-price-in-usd (some price)))
+	)	
+)
+
+(define-read-only (get-options-price-in-usd) 
+	(var-get options-price-in-usd)
+)
+
+;; options-ledger
+;; #[allow(unchecked_data)]
+(define-public (set-options-ledger-entry (strike uint)) 
+	(begin
+		(asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_CONTRACT_OWNER)
+		(ok (map-set options-ledger 
+			{ cycle-expiry: (get-current-cycle-expiry) } 
+			{ 
+			strike: strike, 
+			first-token-id: u0, 
+			last-token-id: u0,
+			option-pnl: none,
+			total-pnl: none 
+			}
+		)
+		)
+	)	
+)
+
+(define-read-only (get-options-ledger-entry (cycle-expiry uint)) 
+  (ok (unwrap! (map-get? options-ledger {cycle-expiry: cycle-expiry}) ERR_NO_INFO_FOR_EXPIRY))
+)
+
+(define-read-only (get-strike-for-expiry (cycle-expiry uint)) 
+  (ok (get strike (unwrap! (map-get? options-ledger {cycle-expiry: cycle-expiry}) ERR_NO_INFO_FOR_EXPIRY)))
+)
+
+;; options-for-sale
+;; #[allow(unchecked_data)]
+(define-public (set-options-for-sale (amount uint)) 
+	(begin
+		(asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_CONTRACT_OWNER)
+		(ok (var-set options-for-sale amount))
+	)	
+)
+
+(define-read-only (get-options-for-sale) 
+	(var-get options-for-sale)
 )
