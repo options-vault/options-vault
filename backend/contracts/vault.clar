@@ -175,31 +175,31 @@
   (let  (
           (investor-info (unwrap-panic (map-get? ledger investor)))
           (investor-balance (get balance investor-info))
-          (investor-pending-withdrawalal (get pending-withdrawal investor-info))
+          (investor-pending-withdrawal (get pending-withdrawal investor-info))
           (investor-address (get address investor-info))
         )
         (if (and 
-              (>= investor-balance investor-pending-withdrawalal)
-              (> investor-pending-withdrawalal u0)
+              (>= investor-balance investor-pending-withdrawal)
+              (> investor-pending-withdrawal u0)
             )
             ;; if investor's balance is equal or greater than its pending-withdrawal amount
             ;; and investor's pending-withdrawal amount is greater than 0
             (begin 
-              (try! (as-contract (stx-transfer? investor-pending-withdrawalal tx-sender investor-address)))
-              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawalal))
+              (try! (as-contract (stx-transfer? investor-pending-withdrawal tx-sender investor-address)))
+              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
               (map-set ledger
                 tx-sender
                 (merge
                   investor-info
                   {
                     balance: 
-                      (substract-to-balance investor-pending-withdrawalal),
+                      (substract-to-balance investor-pending-withdrawal),
                     pending-withdrawal:
                       u0
                   }  
                 )
               )
-              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawalal))
+              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
             )
             ;; if false just pass
             true
@@ -213,10 +213,10 @@
 (define-public (queue-withdrawal (amount uint)) 
   (let  (
           (investor-balance (unwrap! (get-balance) TX_SENDER_NOT_IN_LEDGER))
-          (investor-pending-withdrawalal (get-pending-withdrawal))
+          (investor-pending-withdrawal (get-pending-withdrawal))
           (investor-info (unwrap-panic (map-get? ledger tx-sender)))
         )
-        (asserts! (>= investor-balance (+ investor-pending-withdrawalal amount)) INSUFFICIENT_FUNDS)
+        (asserts! (>= investor-balance (+ investor-pending-withdrawal amount)) INSUFFICIENT_FUNDS)
         (map-set ledger  
           tx-sender
           (merge 
