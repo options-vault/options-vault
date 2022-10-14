@@ -24,8 +24,6 @@ export function CreateTwoDepositorsAndProcess(chain: Chain, accounts: Map<string
         Tx.contractCall("vault", "queue-deposit", [types.uint(2000)], wallet_2),
         Tx.contractCall("vault", "process-deposits", [], wallet_1)
     ]);
-    console.log(block.receipts)
-    console.log(wallet_1)
     return block
 }
 
