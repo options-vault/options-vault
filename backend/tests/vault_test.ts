@@ -3,6 +3,17 @@ import { assert, assertEquals } from 'https://deno.land/std@0.90.0/testing/asser
 import { createTwoDepositorsAndProcess } from "./init.ts"
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
 
+const errorCodes = {
+    INVALID_AMOUNT : 100,
+    VAULT_NOT_ALLOWED : 101,
+    INSUFFICIENT_FUNDS : 102,
+    TX_SENDER_NOT_IN_LEDGER : 103,
+ONLY_CONTRACT_ALLOWED : 104,
+HAS_TO_WAIT_UNTIL_NEXT_BLOCK : 105,
+TX_NOT_APPLIED_YET : 106,
+PREMIUM_NOT_SPLITTED_CORRECTLY : 107,
+}
+
 Clarinet.test({
     name: "Ensure that users can deposit and their funds are processed",
     fn(chain: Chain, accounts: Map<string, Account>) {
@@ -28,7 +39,9 @@ Clarinet.test({
         block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_3),
         ])
-        block.receipts[0].result.expectErr()
+        console.log(block.receipts[0])
+        // ERR TX_SENDER_NOT_IN_LEDGER
+        block.receipts[0].result.expectErr().expectUint(errorCodes.TX_SENDER_NOT_IN_LEDGER)
 }})
 
 Clarinet.test({
@@ -71,9 +84,9 @@ Clarinet.test({
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1)], wallet_2)
 
         ])
-        block.receipts[0].result.expectErr()
+        block.receipts[0].result.expectErr().expectUint(errorCodes.INSUFFICIENT_FUNDS)
         block.receipts[1].result.expectOk()
-        block.receipts[2].result.expectErr()
+        block.receipts[2].result.expectErr().expectUint(errorCodes.INSUFFICIENT_FUNDS)
 
 }})
 
@@ -182,4 +195,17 @@ Clarinet.test({
 
         // but user 2 still has 1 stack left
         chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_2).result.expectSome().expectUint(1000000);
+}})
+
+Clarinet.test({
+    name: "Ensure that deposit must be valid amount",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+		const wallet_1 = accounts.get('wallet_1')!.address;
+
+        let block = chain.mineBlock([
+            Tx.contractCall("vault", "queue-deposit", [types.uint(0)], wallet_1),
+        ])
+
+        // ERR INVALID AMOUNT
+        block.receipts[0].result.expectErr().expectUint(errorCodes.INVALID_AMOUNT)
 }})
