@@ -550,3 +550,8 @@
 (define-read-only (get-settlement-block-height) 
 	(var-get settlement-block-height)
 )
+
+;; options-ledger-list
+(define-read-only (get-options-ledger-list) 
+	(var-get options-ledger-list)
+)

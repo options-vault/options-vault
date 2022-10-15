@@ -383,4 +383,56 @@ Clarinet.test({
 })
 
 // Test that add-to-options-ledger-list function correctly adds the ended cycle-tuple
+Clarinet.test({
+	name: "Ensure that the add-to-options-ledger-list function correctly adds the ended cycle-tuple for an in-the-money option",
+	async fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		let block = createTwoDepositorsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Initialize the first auction; the strike price is in-the-money (below spot)
+		block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			testInTheMoneyStrikePriceMultiplier, 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		assertEquals(block.receipts.length, 2);
+		
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger the end-current-cycle method
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		// We read the options-ledger-list from the on-chain contract
+		const optionsLedgerList = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-ledger-list",
+			[],
+			deployer.address
+		)
+		// And expect the result to be a list
+		optionsLedgerList.result.expectList()
+		// And expect the first entry to contain the testCycleExpiry timestamp
+		assertEquals(optionsLedgerList.result.expectList()[0].includes(testCycleExpiry), true)
+	}
+})
+
 
