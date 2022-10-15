@@ -537,3 +537,21 @@
 (define-read-only (get-options-for-sale) 
 	(var-get options-for-sale)
 )
+
+;; settlement-block-height
+;; #[allow(unchecked_data)]
+(define-public (set-settlement-block-height (height uint)) 
+	(begin
+		(asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_CONTRACT_OWNER)
+		(ok (var-set settlement-block-height height))
+	)	
+)
+
+(define-read-only (get-settlement-block-height) 
+	(var-get settlement-block-height)
+)
+
+;; options-ledger-list
+(define-read-only (get-options-ledger-list) 
+	(var-get options-ledger-list)
+)
