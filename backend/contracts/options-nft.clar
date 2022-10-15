@@ -65,7 +65,7 @@
 (define-data-var auction-decrement-value uint u0)
 
 (define-data-var settlement-block-height uint u0) 
-(define-data-var cycle-can-be-ended bool true) ;; TODO: Write init-first-cycle where this is set to true and set it to false by default
+(define-data-var settlement-tx-in-mempool bool false) ;; TODO: Write init-first-cycle where this is set to true and set it to false by default
 
 ;; TODO Change into milliseconds
 
@@ -102,8 +102,8 @@
 
 		(if (and 
 			current-cycle-expired
-			(var-get cycle-can-be-ended)
-			)
+			(not (var-get settlement-tx-in-mempool))
+			)	
 				(try! (end-current-cycle))
 				true
 		)
@@ -142,7 +142,6 @@
 		) 
 		(try! (determine-value-and-settle))
 		(add-to-options-ledger-list cycle-tuple)
-		(var-set cycle-can-be-ended false)
 		(ok true)
 	) 
 )
@@ -183,7 +182,7 @@
 		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
 		(var-set current-cycle-expiry next-cycle-expiry)
 		(var-set options-for-sale (/ (contract-call? .vault get-total-balances) stacks-base))
-		(var-set cycle-can-be-ended true)
+		(var-set settlement-tx-in-mempool false)
 		(ok true) 
 	)
 )
@@ -217,6 +216,8 @@
 				)
 				;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
 				(try! (contract-call? .vault create-settlement-pool (usd-to-stx (* (- stxusd-rate strike) options-minted-amount) stxusd-rate) (as-contract tx-sender)))
+				(var-set settlement-tx-in-mempool true)
+				(var-set settlement-block-height block-height)
 			)
 			;; Option is out-of-the-money, pnl is zero
 			(map-set options-ledger 
@@ -230,7 +231,6 @@
 				)
 			)
 		)
-		(var-set settlement-block-height block-height)
   	(ok true)
 	)
 )

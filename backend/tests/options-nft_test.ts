@@ -288,7 +288,7 @@ Clarinet.test({
 		);
 		assertEquals(block.receipts.length, 5);
 
-		// Mint two options-nfts
+		// Mint two option NFTs
 		block = initMint(
 			chain, 
 			accountA.address, 
@@ -297,7 +297,7 @@ Clarinet.test({
 		)
 		assertEquals(block.receipts.length, 2);
 		
-		// Submit price data that is slightly after the current-cycle-expiry 
+		// Submit price data that is slightly after the current-cycle-expiry to trigger the end-current-cycle method
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
 		block.receipts[0].result.expectOk().expectBool(true);
 		// Since the option was in-the-money, we expect a settlement tx that sends all STX
@@ -319,3 +319,9 @@ Clarinet.test({
 		)
 	}
 })
+
+// Test if the determine-value-and-settle function correclty sets settlement-block-height for in-the-money scenario
+
+
+// Test add-to-options-ledger-list function correctly adds the ended cycle-tuple
+
