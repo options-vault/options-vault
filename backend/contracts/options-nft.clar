@@ -18,6 +18,7 @@
 (define-constant ERR_PROCESS_DEPOSITS (err u121))
 (define-constant ERR_PROCESS_WITHDRAWALS (err u122))
 (define-constant ERR_RETRIEVING_STXUSD (err u123))
+(define-constant ERR_UPDATE_PRICE_FAILED (err u124))
 
 (define-data-var contract-owner principal tx-sender)
 
@@ -254,7 +255,7 @@
 		;; (i.e. the risk of a unfavorable change in the price of the underlying asset)
 		(asserts! (< timestamp (+ (var-get auction-start-time) (* min-in-milliseconds u180))) ERR_AUCTION_CLOSED)
 		;; Update the mint price based on where in the 180 min minting window we are 
-		(update-options-price-in-usd timestamp)
+		(unwrap! (update-options-price-in-usd timestamp) ERR_UPDATE_PRICE_FAILED)
 		;; Update the token ID nonce
 		(var-set token-id-nonce token-id)
 		;; Deposit the premium payment into the vault contract
@@ -278,7 +279,7 @@
 		(
 			(decrement (* (/ (- timestamp (var-get auction-start-time)) (* min-in-milliseconds u30)) (var-get auction-decrement-value)))
 		)
-		(var-set options-price-in-usd (some (- (unwrap-panic (var-get options-price-in-usd)) decrement)))
+		(ok (var-set options-price-in-usd (some (- (unwrap-panic (var-get options-price-in-usd)) decrement))))
 	)
 )
 
