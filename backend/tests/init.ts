@@ -23,6 +23,12 @@ export type RedstoneData = {
   providerPublicKey: string
 };
 
+export function setTrustedOracle(chain: Chain, senderAddress: string): Block {
+	return chain.mineBlock([
+		Tx.contractCall("options-nft", "set-trusted-oracle", [trustedOraclePubkey, types.bool(true)], senderAddress),
+	]);
+}
+
 
 export function createTwoDepositorsAndProcess(chain: Chain, accounts: Map<string, Account>) {
   const wallet_1 = accounts.get('wallet_1')?.address ?? ""
@@ -42,11 +48,11 @@ export function initAuction(
   deployerAddress: string,
   auctionStart: number, 
   cycleExpiry: number,
-  strikePlacement: string, 
+  strikeMultiplier: number, 
   redstoneData: RedstoneData[]): Block {
-    let strikeMultiplier;
-    if (strikePlacement === 'outOfTheMoney') strikeMultiplier = 1.15
-    if (strikePlacement === 'inTheMoney') strikeMultiplier = 0.8
+    // let strikeMultiplier;
+    // if (strikePlacement === 'outOfTheMoney') strikeMultiplier = 1.15
+    // if (strikePlacement === 'inTheMoney') strikeMultiplier = 0.8
 
     let block = chain.mineBlock([
       Tx.contractCall(
