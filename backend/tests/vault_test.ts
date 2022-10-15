@@ -135,9 +135,9 @@ Clarinet.test({
         // TODO make so ledger reads null rather than zero when user has completely withdrawn
         
          // user 1 has withdrawn their whole account already, expect they are not in ledger
-        //chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1).result.expectNone();
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1).result.expectNone();
         // user is actually in ledger with 0 microstacks
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1).result.expectSome().expectUint(0);
+        // chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1).result.expectSome().expectUint(0);
 
         // but user 2 still has their 2 stacks
         chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_2).result.expectSome().expectUint(2000000);
@@ -179,7 +179,7 @@ Clarinet.test({
 
         block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
-        Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
+            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
             
         ])
         block = chain.mineBlock([

@@ -1,9 +1,7 @@
-
 ;; vault
 ;; Balance holder that has withdraw/deposit functions, and ledger storage
 
 ;; constants
-;;
 (define-constant CONTRACT_ADDRESS (as-contract tx-sender))
 
 (define-constant INVALID_AMOUNT (err u100))
@@ -164,8 +162,14 @@
 (define-public (process-withdrawals)
   (begin
     (map process-withdrawals-updater (var-get investor-addresses))
+    (var-set investor-addresses (filter investors-filter (var-get investor-addresses)))
     (ok true)
   )
+)
+
+;; <investors-filter>: Checks if the investor exists in the ledger, if not, then the filter function will discard it from the investors list
+(define-private (investors-filter (investor principal)) 
+  (is-some (map-get? ledger investor))
 )
 
 ;; <process-withdrawals-updater>: Substracts the pending-withdrawal amount (and resets it) from balance amount for each investor in the ledger
@@ -185,11 +189,11 @@
             )
             ;; if investor's balance is equal or greater than its pending-withdrawal amount
             ;; and investor's pending-withdrawal amount is greater than 0
-            (begin 
+            (begin
               (try! (as-contract (stx-transfer? investor-pending-withdrawal tx-sender investor-address)))
               (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
               (map-set ledger
-                tx-sender
+                investor
                 (merge
                   investor-info
                   {
@@ -201,6 +205,11 @@
                 )
               )
               (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
+              (if 
+                (is-eq (get balance (unwrap-panic (map-get? ledger investor))) u0)
+                (map-delete ledger investor)
+                true
+              )
             )
             ;; if false just pass
             true
