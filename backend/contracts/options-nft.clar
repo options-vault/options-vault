@@ -89,7 +89,7 @@
 		(
 			;; Recover the pubkey of the signer.
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
-			(current-cycle-expired (> timestamp (var-get current-cycle-expiry)))
+			(current-cycle-expired (>= timestamp (var-get current-cycle-expiry)))
 		)
 		;; Check if the signer is a trusted oracle.
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
