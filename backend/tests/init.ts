@@ -133,16 +133,13 @@ export function submitPriceDataAndTest(
 }
 
 // Note: auction-decrement-value is not being set
-export function initAuction(
+export function initFirstAuction(
   chain: Chain, 
   deployerAddress: string,
   auctionStart: number, 
   cycleExpiry: number,
   strikeMultiplier: number, 
   redstoneData: RedstoneData[]): Block {
-    // let strikeMultiplier;
-    // if (strikePlacement === 'outOfTheMoney') strikeMultiplier = 1.15
-    // if (strikePlacement === 'inTheMoney') strikeMultiplier = 0.8
 
     let block = chain.mineBlock([
       Tx.contractCall(
@@ -264,18 +261,6 @@ export function setEnvironmentForEndCurrentCycle({
     const packageCV = pricePackageToCV(pricePackage);
     
     let block = chain.mineBlock([
-      Tx.contractCall(
-        'options-nft',
-        'set-trusted-oracle',
-        [ oraclePubKey, types.bool(isOracleTrusted) ],
-        deployer
-      ),
-      Tx.contractCall(
-        'options-nft',
-        'set-current-cycle-expiry',
-        [ types.uint(currentCycleExpiry) ],
-        deployer
-      ),
       Tx.contractCall(
         'options-nft',
         'submit-price-data',

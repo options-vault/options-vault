@@ -1,9 +1,7 @@
-
 ;; vault
 ;; Balance holder that has withdraw/deposit functions, and ledger storage
 
 ;; constants
-;;
 (define-constant CONTRACT_ADDRESS (as-contract tx-sender))
 
 (define-constant INVALID_AMOUNT (err u100))

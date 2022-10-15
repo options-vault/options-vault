@@ -1,9 +1,9 @@
 
-import { Clarinet, Tx, Chain, Account, types, assertEquals, shiftPriceValue, liteSignatureToStacksSignature, pricePackageToCV } from "./deps.ts";
+import { Clarinet, Tx, Chain, Account, types, assertEquals, stringToUint8Array, shiftPriceValue, liteSignatureToStacksSignature, pricePackageToCV } from "./deps.ts";
 import type { PricePackage, Block } from "./deps.ts";
 import axiod from "https://deno.land/x/axiod@0.26.2/mod.ts";
 import { redstoneDataOneMinApart } from "./redstone-data.ts";
-import { createTwoDepositors, initAuction, initMint, setTrustedOracle, submitPriceData, submitPriceDataAndTest } from "./init.ts";
+import { createTwoDepositorsAndProcess, createTwoDepositors, initFirstAuction, initMint, setTrustedOracle, submitPriceData, submitPriceDataAndTest } from "./init.ts";
 
 const contractOwner = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM"
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
@@ -22,8 +22,8 @@ const testAuctionStartTime = firstRedstoneTimestamp - 10;
 const testCycleExpiry = midRedstoneTimestamp + 10;
 const testOptionsForSale = 3;
 const testOptionsUsdPricingMultiplier = 0.02
-const testOutOfTheMoneyStrikePriceMultiplier = 1.15
-const testInTheMoneyStrikPriceMultiplier = 0.8
+const testOutOfTheMoneyStrikePriceMultiplier = 1.15 // 15% above spot
+const testInTheMoneyStrikePriceMultiplier = 0.8 // 20% below spot
 
 // Testing setting trusted oracle
 Clarinet.test({
@@ -111,7 +111,7 @@ Clarinet.test({
 	name: "Ensure that the options-nft auction is properly initialized",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer] = ["deployer"].map(who => accounts.get(who)!);
-		const block = initAuction(
+		const block = initFirstAuction(
 			chain, 
 			deployer.address,
 			testAuctionStartTime, 
@@ -178,7 +178,7 @@ Clarinet.test({
 	name: "Ensure that the mint function works for the right inputs",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
-		let block = initAuction(
+		let block = initFirstAuction(
 			chain, 
 			deployer.address,
 			testAuctionStartTime, 
@@ -203,7 +203,7 @@ Clarinet.test({
 			],
 			deployer.address
 		)
-		assertEquals(stxPriceA.result, types.uint(2000000))
+		assertEquals(stxPriceA.result, types.uint(20000))
 
 		const stxPriceB = chain.callReadOnlyFn(
 			"options-nft",
@@ -214,28 +214,28 @@ Clarinet.test({
 			],
 			deployer.address
 		)
-		assertEquals(stxPriceB.result, types.uint(2013262))
+		assertEquals(stxPriceB.result, types.uint(20132))
 
 		assertEquals(block.receipts.length, 2);
 		// TODO Refactor to use expectNonFungibleTokenMintEvent()
 		block.receipts[0].result.expectOk().expectUint(1)
-		block.receipts[0].events.expectSTXTransferEvent(2000000, accountA.address, vaultContract)
+		block.receipts[0].events.expectSTXTransferEvent(20000, accountA.address, vaultContract)
 		// block.receipts[0].events.expectNonFungibleTokenMintEvent(types.uint(1), accountA.address, contractOwner, '.options-nft')
 		assertEquals(block.receipts[0].events[1].type, "nft_mint_event")
 
 		block.receipts[1].result.expectOk().expectUint(2)
-		block.receipts[1].events.expectSTXTransferEvent(2013262, accountB.address, vaultContract)
+		block.receipts[1].events.expectSTXTransferEvent(20132, accountB.address, vaultContract)
 		assertEquals(block.receipts[1].events[1].type, "nft_mint_event")
 	},
 });
 
-// Test end-current-cycle function
+// Test end-current-cycle function for an out-of-the-money option
 Clarinet.test({
-	name: "Ensure that the end-current-cycle function works for the right inputs",
+	name: "Ensure that the end-current-cycle function works for an out-of-the-money option",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 		
-		let block = initAuction(
+		let block = initFirstAuction(
 			chain, 
 			deployer.address,
 			testAuctionStartTime, 
@@ -245,6 +245,50 @@ Clarinet.test({
 		);
 		assertEquals(block.receipts.length, 5);
 
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		const optionPnl = chain.callReadOnlyFn(
+			"options-nft",
+			"get-option-pnl-for-expiry",
+			[types.uint(testCycleExpiry)],
+			deployer.address
+		)
+		assertEquals(optionPnl.result.expectOk().expectSome(), types.uint(0))
+	}
+})
+
+// Test end-current-cycle function for in-the-money option
+Clarinet.test({
+	name: "Ensure that the end-current-cycle function works for an in-the-money option",
+	async fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		const inTheMoneyStrikePrice = shiftPriceValue(redstoneDataOneMinApart[0].value * testInTheMoneyStrikePriceMultiplier)
+		const lastestStxusdRate = shiftPriceValue(redstoneDataOneMinApart[5].value)
+		const expectedOptionsPnlUSD = lastestStxusdRate - inTheMoneyStrikePrice
+
+		let block = createTwoDepositorsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Initialize the first auction; the strike price is in-the-money (below spot)
+		block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			testInTheMoneyStrikePriceMultiplier, 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
 		block = initMint(
 			chain, 
 			accountA.address, 
@@ -252,11 +296,32 @@ Clarinet.test({
 			redstoneDataOneMinApart
 		)
 		assertEquals(block.receipts.length, 2);
-
+		
+		// Submit price data that is slightly after the current-cycle-expiry to trigger the end-current-cycle method
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
-    // block.receipts[0].result.expectOk().expectBool(true);
+		block.receipts[0].result.expectOk().expectBool(true);
+		// Since the option was in-the-money, we expect a settlement tx that sends all STX
+		// owed to NFT holders from the vaultContract to the optionsNFTContract
+		block.receipts[0].events.expectSTXTransferEvent(389389, vaultContract, optionsNFTContract)
 
-		console.log(block)
+		// We read the options-pnl from the on-chain ledger
+		const optionsPnlSTXFromLedger = chain.callReadOnlyFn(
+			"options-nft",
+			"get-option-pnl-for-expiry",
+			[types.uint(testCycleExpiry)],
+			deployer.address
+		)
+		optionsPnlSTXFromLedger.result.expectOk().expectSome()
+		// And compare the on-chain ledger entry to the number we would expect from our input values
+		assertEquals(
+			optionsPnlSTXFromLedger.result.expectOk().expectSome(), 
+			types.uint(Math.floor(expectedOptionsPnlUSD / lastestStxusdRate * 1000000))
+		)
 	}
 })
+
+// Test if the determine-value-and-settle function correclty sets settlement-block-height for in-the-money scenario
+
+
+// Test add-to-options-ledger-list function correctly adds the ended cycle-tuple
 
