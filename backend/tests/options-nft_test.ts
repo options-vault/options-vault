@@ -84,7 +84,7 @@ Clarinet.test({
 	name: "Ensure that anyone can submit price data signed by trusted oracles",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
 		const [accountA] = ["wallet_1"].map(who => accounts.get(who)!);
-		
+
 		const block = submitPriceData(chain, accountA.address, redstoneDataOneMinApart[0])
     block.receipts[0].result.expectOk().expectBool(true);
 
@@ -228,4 +228,35 @@ Clarinet.test({
 		assertEquals(block.receipts[1].events[1].type, "nft_mint_event")
 	},
 });
+
+// Test end-current-cycle function
+Clarinet.test({
+	name: "Ensure that the end-current-cycle function works for the right inputs",
+	async fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+		
+		let block = initAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			testOutOfTheMoneyStrikePriceMultiplier, 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		assertEquals(block.receipts.length, 2);
+
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+    // block.receipts[0].result.expectOk().expectBool(true);
+
+		console.log(block)
+	}
+})
 

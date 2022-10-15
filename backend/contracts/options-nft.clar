@@ -19,6 +19,7 @@
 (define-constant ERR_PROCESS_WITHDRAWALS (err u122))
 (define-constant ERR_RETRIEVING_STXUSD (err u123))
 (define-constant ERR_UPDATE_PRICE_FAILED (err u124))
+(define-constant ERR_READING_STXUSD (err u125))
 
 (define-data-var contract-owner principal tx-sender)
 
@@ -143,7 +144,7 @@
 (define-private (init-next-cycle) 
 	(let 
 		(
-			(stxusd-rate (unwrap! (var-get last-stxusd-rate) (err u7)))
+			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD))
 			(strike (calculate-strike stxusd-rate)) ;; simplified calculation for mvp scope
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-milliseconds))
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
@@ -182,11 +183,11 @@
 (define-private (determine-value-and-settle)
 	(let
 		(
-			(stxusd-rate (unwrap-panic (var-get last-stxusd-rate)))
+			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD))
 			(settlement-expiry (var-get current-cycle-expiry))
 	  	(settlement-options-ledger-entry (try! (get-options-ledger-entry settlement-expiry)))
     	(strike (get strike settlement-options-ledger-entry))
-			(options-minted-amount (- (get first-token-id settlement-options-ledger-entry) (get last-token-id settlement-options-ledger-entry)))
+			(options-minted-amount (- (get last-token-id settlement-options-ledger-entry) (get first-token-id settlement-options-ledger-entry)))
 		)
 		(if (> strike stxusd-rate) 
 			;; Option is in-the-money, pnl is positive
