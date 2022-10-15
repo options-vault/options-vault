@@ -89,7 +89,9 @@ Clarinet.test({
         let block = createTwoDepositorsAndProcess(chain, accounts)
 
         block = chain.mineBlock([
+            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
             Tx.contractCall("vault", "process-withdrawals", [], wallet_1)
         ])
         block.receipts[0].result.expectOk()
+        block.receipts[1].events.expectSTXTransferEvent(1000000, vaultContract, wallet_1)
 }})
