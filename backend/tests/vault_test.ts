@@ -166,7 +166,7 @@ Clarinet.test({
 
         block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
-        Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
+            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
             
         ])
         block = chain.mineBlock([

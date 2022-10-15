@@ -64,6 +64,7 @@
 (define-data-var auction-decrement-value uint u0)
 
 (define-data-var settlement-block-height uint u0) 
+(define-data-var cycle-can-be-ended bool true) ;; TODO: Write init-first-cycle where this is set to true and set it to false by default
 
 ;; TODO Change into milliseconds
 
@@ -88,7 +89,6 @@
 			;; Recover the pubkey of the signer.
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
 			(current-cycle-expired (> timestamp (var-get current-cycle-expiry)))
-			(settlement-tx-mined (> block-height (var-get settlement-block-height)))
 		)
 		;; Check if the signer is a trusted oracle.
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
@@ -99,19 +99,25 @@
 		(var-set last-stxusd-rate (get value (element-at entries u0))) ;; TODO: check if stxusd is always the first entry in the list after filtering
 		(var-set last-seen-timestamp timestamp)		
 
-		(if current-cycle-expired
-			(try! (end-current-cycle))
-			true
+		(if (and 
+			current-cycle-expired
+			(var-get cycle-can-be-ended)
+			)
+				(try! (end-current-cycle))
+				true
 		)
 
-		(if (and current-cycle-expired settlement-tx-mined) ;;this one will never be reached if the first state is true
-			(begin
-				(try! (contract-call? .vault distribute-pnl))
-				(unwrap! (contract-call? .vault process-deposits) ERR_PROCESS_DEPOSITS)
-				(unwrap! (contract-call? .vault process-withdrawals) ERR_PROCESS_WITHDRAWALS)
-				(unwrap! (init-next-cycle) ERR_CYCLE_INIT_FAILED) 
-			)
-			true
+		(if (and 
+			current-cycle-expired 
+			(> block-height (var-get settlement-block-height))
+			) 
+				(begin
+					(try! (contract-call? .vault distribute-pnl))
+					(unwrap! (contract-call? .vault process-deposits) ERR_PROCESS_DEPOSITS)
+					(unwrap! (contract-call? .vault process-withdrawals) ERR_PROCESS_WITHDRAWALS)
+					(unwrap! (init-next-cycle) ERR_CYCLE_INIT_FAILED) 
+				)
+				true
 		)
 		(ok true)
 	)
@@ -131,6 +137,7 @@
 		) 
 		(try! (determine-value-and-settle))
 		(add-to-options-ledger-list cycle-tuple)
+		(var-set cycle-can-be-ended false)
 		(ok true)
 	) 
 )
@@ -171,6 +178,7 @@
 		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
 		(var-set current-cycle-expiry next-cycle-expiry)
 		(var-set options-for-sale (/ (contract-call? .vault get-total-balances) stacks-base))
+		(var-set cycle-can-be-ended true)
 		(ok true) 
 	)
 )

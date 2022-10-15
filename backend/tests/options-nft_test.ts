@@ -3,7 +3,7 @@ import { Clarinet, Tx, Chain, Account, types, assertEquals, shiftPriceValue, lit
 import type { PricePackage, Block } from "./deps.ts";
 import axiod from "https://deno.land/x/axiod@0.26.2/mod.ts";
 import { redstoneDataOneMinApart } from "./redstone-data.ts";
-import { createTwoDepositors, initAuction, initMint, setTrustedOracle, submitPriceData, submitPriceDataAndTest } from "./init.ts";
+import { createTwoDepositors, initFirstAuction, initMint, setTrustedOracle, submitPriceData, submitPriceDataAndTest } from "./init.ts";
 
 const contractOwner = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM"
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
@@ -111,7 +111,7 @@ Clarinet.test({
 	name: "Ensure that the options-nft auction is properly initialized",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer] = ["deployer"].map(who => accounts.get(who)!);
-		const block = initAuction(
+		const block = initFirstAuction(
 			chain, 
 			deployer.address,
 			testAuctionStartTime, 
@@ -178,7 +178,7 @@ Clarinet.test({
 	name: "Ensure that the mint function works for the right inputs",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
-		let block = initAuction(
+		let block = initFirstAuction(
 			chain, 
 			deployer.address,
 			testAuctionStartTime, 
@@ -235,7 +235,7 @@ Clarinet.test({
 	async fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 		
-		let block = initAuction(
+		let block = initFirstAuction(
 			chain, 
 			deployer.address,
 			testAuctionStartTime, 

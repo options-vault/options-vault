@@ -133,7 +133,7 @@ export function submitPriceDataAndTest(
 }
 
 // Note: auction-decrement-value is not being set
-export function initAuction(
+export function initFirstAuction(
   chain: Chain, 
   deployerAddress: string,
   auctionStart: number, 
