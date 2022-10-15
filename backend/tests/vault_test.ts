@@ -19,7 +19,7 @@ Clarinet.test({
 });
 
 Clarinet.test({
-    name: "Ensure that users can withdraw correct amounts",
+    name: "Ensure that non user cannot withdraw",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const wallet_1 = accounts.get('wallet_1')?.address ?? ""
         const wallet_2 = accounts.get('wallet_2')?.address ?? ""
@@ -27,30 +27,71 @@ Clarinet.test({
 
         let block = createTwoDepositorsAndProcess(chain, accounts)
 
-        // console.log(wallet_3)
-        // console.log(wallet_1)
-
-        // TODO: This is great - each of the contractCalls should ideally be their own test
         block = chain.mineBlock([
-            // random tries to withdraw, should fail
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_3),
-            // user tries to withdraw their whole account, should succeed
+        ])
+        block.receipts[0].result.expectErr()
+}})
+
+Clarinet.test({
+    name: "Ensure that user can withdraw their whole account",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const wallet_1 = accounts.get('wallet_1')?.address ?? ""
+        const wallet_2 = accounts.get('wallet_2')?.address ?? ""
+        const wallet_3 = accounts.get('wallet_3')?.address ?? ""
+
+        let block = createTwoDepositorsAndProcess(chain, accounts)
+
+        block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
-            // user withdraws part of account, should succeed 
+
+        ])
+        block.receipts[0].result.expectOk()
+}})
+
+Clarinet.test({
+    name: "Ensure that user can withdraw part of their account",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const wallet_1 = accounts.get('wallet_1')?.address ?? ""
+        const wallet_2 = accounts.get('wallet_2')?.address ?? ""
+
+        let block = createTwoDepositorsAndProcess(chain, accounts)
+
+        block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
-            // user withdraw the rest of their account, should succeed
-            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
-            // user withdraws after they have withdrawn their total account, should fail
-            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
-            // 
+        ])
+        block.receipts[0].result.expectOk()
+}})
+
+Clarinet.test({
+    name: "Ensure that user cannot withdraw more than their accounts worth of stacks",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const wallet_2 = accounts.get('wallet_2')?.address ?? ""
+
+        let block = createTwoDepositorsAndProcess(chain, accounts)
+
+        block = chain.mineBlock([
+            Tx.contractCall("vault", "queue-withdrawal", [types.uint(2000001)], wallet_2),
+            Tx.contractCall("vault", "queue-withdrawal", [types.uint(2000000)], wallet_2),
+            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1)], wallet_2)
+
+        ])
+        block.receipts[0].result.expectErr()
+        block.receipts[1].result.expectOk()
+        block.receipts[2].result.expectErr()
+
+}})
+
+Clarinet.test({
+    name: "Ensure that pending withdrawals are actualised correctly",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const wallet_1 = accounts.get('wallet_1')?.address ?? ""
+        let block = createTwoDepositorsAndProcess(chain, accounts)
+
+        block = chain.mineBlock([
+            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
             Tx.contractCall("vault", "process-withdrawals", [], wallet_1)
-            
-        ]);
-
-        // console.log(block.receipts)
-
-        // TODO check contract balance
-        //console.log(block.receipts[0].events[0])
-    },
-});
-
+        ])
+        block.receipts[0].result.expectOk()
+        block.receipts[1].events.expectSTXTransferEvent(1000000, vaultContract, wallet_1)
+}})
