@@ -104,7 +104,7 @@
 			true
 		)
 
-		(if (and current-cycle-expired settlement-tx-mined)
+		(if (and current-cycle-expired settlement-tx-mined) ;;this one will never be reached if the first state is true
 			(begin
 				(try! (contract-call? .vault distribute-pnl))
 				(unwrap! (contract-call? .vault process-deposits) ERR_PROCESS_DEPOSITS)
@@ -118,7 +118,7 @@
 )
 
 (define-private (is-stxusd (entries-list {symbol: (buff 32), value: uint})) 
-  (is-eq (get symbol entries-list) symbol-stxusd)
+  (is-eq (get symbol entries-list) symbol-stxusd) ;; Maybe get symbol has to be wrapped with a sha256 func
 )
 
 ;; END CURRENT CYCLE

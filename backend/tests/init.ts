@@ -1,5 +1,6 @@
 import { types, Tx, Chain, Account, shiftPriceValue, pricePackageToCV, liteSignatureToStacksSignature } from './deps.ts';
 import type { PricePackage, Block } from "./deps.ts";
+import { redstoneDataOneMinApart } from "./redstone-data.ts";
 
 export type RedstoneData = {
 	id: string,
@@ -129,25 +130,20 @@ export function initMint(
 // For test end-current-clycle
 
 const lastTokenId = 5;
-const cycleExpiry = 65340234; // has to be changed
-const stxUsdRate = 231;
-const settlementExpiry = cycleExpiry;
+const cycleExpiry = redstoneDataOneMinApart[4].timestamp + 10;
 const srtike = 3000000;
-const optionsMintedAmount = 0;
 const trustedOraclePubkey = "0x035ca791fed34bf9e9d54c0ce4b9626e1382cf13daa46aa58b657389c24a751cc6";
-const untrustedOraclePubkey = "0x03cd2cfdbd2ad9332828a7a13ef62cb999e063421c708e863a7ffed71fb61c88c9";
 const pricePack = {
-  timestamp: 1647332581, // Tue Mar 15 2022 08:23:01 GMT+0000
-  prices: [{ symbol: "STXUSD", value: 2.5 }]
+  timestamp: redstoneDataOneMinApart[5].timestamp,
+  prices: [{ symbol: "STXUSD", value: 1 / redstoneDataOneMinApart[5].value }]
 };
-const Signature = "0x80517fa7ea136fa54522338145ebcad95f0be7c4d7c43c522fff0f97686d7ffa581d422619ef2c2718471c31f1af6084a03571f93e3e3bde346cedd2ced71f9100";
+const Signature = types.buff(liteSignatureToStacksSignature(redstoneDataOneMinApart[5].liteEvmSignature));
 
 type presetForEndCurrentCycle = {
   chain: Chain,
   accounts: Map<string,Account>,
   lastTokenId?: Number,
   currentCycleExpiry?: Number,
-  stxUsdRate?: Number,
   strike?: Number,
   optionsMintedAmount?: Number,
   oraclePubKey?: String,
@@ -156,12 +152,11 @@ type presetForEndCurrentCycle = {
   signature?: String
 }
 
-function setEnvironmentForEndCurrentCycle({
+export function setEnvironmentForEndCurrentCycle({
   chain,
   accounts,
   lastTokenId,
   currentCycleExpiry = cycleExpiry,
-  stxUsdRate,
   strike,
   optionsMintedAmount,
   oraclePubKey = trustedOraclePubkey,
@@ -170,7 +165,6 @@ function setEnvironmentForEndCurrentCycle({
   signature = Signature
 }: presetForEndCurrentCycle) {
     const deployer = accounts.get('deployer')!.address;
-    const user_1 = accounts.get('wallet_1')!.address;
     const packageCV = pricePackageToCV(pricePackage);
     
     let block = chain.mineBlock([
@@ -193,6 +187,8 @@ function setEnvironmentForEndCurrentCycle({
         deployer
       )
     ])
+
+    return { block, deployer, packageCV, currentCycleExpiry, signature };
 }
 
 
