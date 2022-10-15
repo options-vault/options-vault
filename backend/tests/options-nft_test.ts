@@ -3,7 +3,7 @@ import { Clarinet, Tx, Chain, Account, types, assertEquals, shiftPriceValue, lit
 import type { PricePackage, Block } from "./deps.ts";
 import axiod from "https://deno.land/x/axiod@0.26.2/mod.ts";
 import { redstoneDataOneMinApart } from "./redstone-data.ts";
-import { createTwoDepositorsAndProcess, initAuction, initMint, setTrustedOracle } from "./init.ts";
+import { createTwoDepositors, initAuction, initMint, setTrustedOracle, submitPriceData } from "./init.ts";
 
 const contractOwner = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM"
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
@@ -22,7 +22,6 @@ const testAuctionStartTime = firstRedstoneTimestamp - 10;
 const testCycleExpiry = midRedstoneTimestamp + 10;
 const testOptionsForSale = 3;
 const testOptionsUsdPricingMultiplier = 0.02
-
 const testOutOfTheMoneyStrikePriceMultiplier = 1.15
 const testInTheMoneyStrikPriceMultiplier = 0.8
 
@@ -83,34 +82,13 @@ Clarinet.test({
 });
 
 // Testing submit-price-data
-// TODO: Why does the filter in submit-price-data work but not in mint?
+
 Clarinet.test({
 	name: "Ensure that anyone can submit price data signed by trusted oracles",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA] = ["deployer", "wallet_1"].map(who => accounts.get(who)!);
-		setTrustedOracle(chain, deployer.address);
-
-		const pricePackage: PricePackage = {
-			timestamp: 1647332581, // Tue Mar 15 2022 08:23:01 GMT+0000
-			prices: [{ symbol: "STXUSD", value: 2.5 }]
-		}
-		
-		const packageCV = pricePackageToCV(pricePackage);
-		const signature = "0x80517fa7ea136fa54522338145ebcad95f0be7c4d7c43c522fff0f97686d7ffa581d422619ef2c2718471c31f1af6084a03571f93e3e3bde346cedd2ced71f9100";
-
-		let block = chain.mineBlock([
-			Tx.contractCall(
-				"options-nft", 
-				"submit-price-data", 
-				[
-					packageCV.timestamp,
-					packageCV.prices,
-					signature
-				], 
-				accountA.address
-			),
-		]);
-		block.receipts[0].result.expectOk().expectBool(true);
+		const block = submitPriceData(chain, accountA.address, redstoneDataOneMinApart[0])
+    block.receipts[0].result.expectOk().expectBool(true);
 
 		const lastSeenTimestamp = chain.callReadOnlyFn(
 			"options-nft",
@@ -118,7 +96,7 @@ Clarinet.test({
 			[],
 			accountA.address
 		)
-		assertEquals(lastSeenTimestamp.result, packageCV.timestamp)
+		assertEquals(lastSeenTimestamp.result, redstoneDataOneMinApart[0].timestamp)
 
 		const lastSTXUSDdRate = chain.callReadOnlyFn(
 			"options-nft",
@@ -126,7 +104,7 @@ Clarinet.test({
 			[],
 			accountA.address
 		)
-		assertEquals(lastSTXUSDdRate.result, types.some(types.uint(pricePackage.prices[0].value * 100000000)))
+		assertEquals(lastSTXUSDdRate.result, types.some(types.uint(redstoneDataOneMinApart[0].value * 100000000)))
 	},
 });
 

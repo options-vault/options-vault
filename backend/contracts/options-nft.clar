@@ -26,7 +26,7 @@
 (define-data-var token-id-nonce uint u0)
 
 ;; TODO: Ensure that all uints are adjusted to different bases 
-(define-constant symbol-stxusd 0x535458555344) ;; "STXUSD" as a buff
+(define-constant symbol-stxusd 0x535458555344) ;; "STXUSD" as a buff; TODO: change to "STX" as a buff
 (define-constant redstone-value-shift u100000000)
 (define-constant stacks-base u1000000)
 (define-constant redstone-stacks-base-diff (/ redstone-value-shift stacks-base))
@@ -95,7 +95,7 @@
 		(asserts! (> timestamp (get-last-block-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than the last block timestamp.
 		(asserts! (>= timestamp (var-get last-seen-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than or equal to the last seen timestamp.
 
-		(var-set last-stxusd-rate (get value (element-at (filter is-stxusd entries) u0))) ;; TODO: check if stxusd is always the first entry in the list after filtering
+		(var-set last-stxusd-rate (get value (element-at entries u0))) ;; TODO: check if stxusd is always the first entry in the list after filtering
 		(var-set last-seen-timestamp timestamp)		
 
 		

@@ -1,4 +1,4 @@
-import { types, Tx, Chain, Account, shiftPriceValue, pricePackageToCV, liteSignatureToStacksSignature } from './deps.ts';
+import { types, Tx, Chain, Account, assertEquals, shiftPriceValue, pricePackageToCV, liteSignatureToStacksSignature } from './deps.ts';
 import type { PricePackage, Block } from "./deps.ts";
 import { redstoneDataOneMinApart } from "./redstone-data.ts";
 
@@ -29,10 +29,23 @@ export function setTrustedOracle(chain: Chain, senderAddress: string): Block {
 	]);
 }
 
+// Creates two depositors for wallet_1 (1 STX) and wallet_2 (2 STX)
+export function createTwoDepositors(chain: Chain, accounts: Map<string, Account>) {
+  const wallet_1 = accounts.get('wallet_1')!.address;
+  const wallet_2 = accounts.get('wallet_2')!.address;
 
+  let block = chain.mineBlock([
+      Tx.contractCall("vault", "queue-deposit", [types.uint(1000000)], wallet_1),
+      Tx.contractCall("vault", "queue-deposit", [types.uint(2000000)], wallet_2),
+  ]);
+  return block
+}
+
+// Creates two depositors for wallet_1 (1 STX) and wallet_2 (2 STX) 
+// and processes the deposits so that the ledger moves it from pending-deposits to balance
 export function createTwoDepositorsAndProcess(chain: Chain, accounts: Map<string, Account>) {
-  const wallet_1 = accounts.get('wallet_1')?.address ?? ""
-  const wallet_2 = accounts.get('wallet_2')?.address ?? ""
+  const wallet_1 = accounts.get('wallet_1')!.address;
+  const wallet_2 = accounts.get('wallet_2')!.address;
 
   let block = chain.mineBlock([
       Tx.contractCall("vault", "queue-deposit", [types.uint(1000000)], wallet_1),
@@ -40,6 +53,83 @@ export function createTwoDepositorsAndProcess(chain: Chain, accounts: Map<string
       Tx.contractCall("vault", "process-deposits", [], wallet_1)
   ]);
   return block
+}
+
+// Submits price data and only runs test that function was executed properly, not that data was correctly set
+export function submitPriceData(
+  chain: Chain,
+  submitterAddress: string,
+  redstoneDataPoint: RedstoneData): Block 
+  {
+    const pricePackage: PricePackage = {
+      timestamp: redstoneDataPoint.timestamp,
+      prices: [{ symbol: "STX", value: redstoneDataPoint.value }]
+    }
+
+    const packageCV = pricePackageToCV(pricePackage)
+    const signature = types.buff(liteSignatureToStacksSignature(redstoneDataPoint.liteEvmSignature))
+
+    let block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft", 
+				"submit-price-data", 
+				[
+					packageCV.timestamp,
+					packageCV.prices,
+					signature
+				], 
+				submitterAddress
+			),
+		]);
+    block.receipts[0].result.expectOk().expectBool(true);
+    return block;
+}
+
+// Submits a price data package from Redstone and runs test to verify that the data has been properly processed
+export function submitPriceDataAndTest(
+  chain: Chain,
+  submitterAddress: string,
+  redstoneDataPoint: RedstoneData): Block 
+  {
+    const pricePackage: PricePackage = {
+      timestamp: redstoneDataPoint.timestamp,
+      prices: [{ symbol: "STX", value: redstoneDataPoint.value }]
+    }
+
+    const packageCV = pricePackageToCV(pricePackage)
+    const signature = types.buff(liteSignatureToStacksSignature(redstoneDataPoint.liteEvmSignature))
+
+    let block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft", 
+				"submit-price-data", 
+				[
+					packageCV.timestamp,
+					packageCV.prices,
+					signature
+				], 
+				submitterAddress
+			),
+		]);
+    block.receipts[0].result.expectOk().expectBool(true);
+
+    const lastSeenTimestamp = chain.callReadOnlyFn(
+			"options-nft",
+			"get-last-seen-timestamp",
+			[],
+			submitterAddress
+		)
+		assertEquals(lastSeenTimestamp.result, packageCV.timestamp)
+
+		const lastSTXUSDdRate = chain.callReadOnlyFn(
+			"options-nft",
+			"get-last-stxusd-rate",
+			[],
+			submitterAddress
+		)
+		assertEquals(lastSTXUSDdRate.result, types.some(types.uint(pricePackage.prices[0].value * 100000000)))
+    
+    return block;
 }
 
 // Note: auction-decrement-value is not being set
