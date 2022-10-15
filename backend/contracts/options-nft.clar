@@ -26,8 +26,9 @@
 (define-non-fungible-token options-nft uint)
 (define-data-var token-id-nonce uint u0)
 
-;; TODO: Ensure that all uints are adjusted to different bases 
-(define-constant symbol-stxusd 0x535458555344) ;; "STXUSD" as a buff; TODO: change to "STX" as a buff
+;; TODO: Ensure that all uints are adjusted to different bases
+(define-constant symbol-stx 0x535458) ;; "STX" as a buff
+(define-constant symbol-stxusd 0x535458555344) ;; "STXUSD" as a buff
 (define-constant redstone-value-shift u100000000)
 (define-constant stacks-base u1000000)
 (define-constant redstone-stacks-base-diff (/ redstone-value-shift stacks-base))
@@ -96,7 +97,7 @@
 		(asserts! (> timestamp (get-last-block-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than the last block timestamp.
 		(asserts! (>= timestamp (var-get last-seen-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than or equal to the last seen timestamp.
 
-		(var-set last-stxusd-rate (get value (element-at entries u0))) ;; TODO: check if stxusd is always the first entry in the list after filtering
+		(var-set last-stxusd-rate (get value (element-at (filter is-stx entries) u0))) ;; TODO: check if stxusd is always the first entry in the list after filtering
 		(var-set last-seen-timestamp timestamp)		
 
 		(if (and 
@@ -124,7 +125,11 @@
 )
 
 (define-private (is-stxusd (entries-list {symbol: (buff 32), value: uint})) 
-  (is-eq (get symbol entries-list) symbol-stxusd) ;; Maybe get symbol has to be wrapped with a sha256 func
+  (is-eq (get symbol entries-list) symbol-stxusd) 
+)
+
+(define-private (is-stx (entries-list {symbol: (buff 32), value: uint})) 
+  (is-eq (get symbol entries-list) symbol-stx) 
 )
 
 ;; END CURRENT CYCLE
@@ -195,9 +200,9 @@
 			(settlement-expiry (var-get current-cycle-expiry))
 	  	(settlement-options-ledger-entry (try! (get-options-ledger-entry settlement-expiry)))
     	(strike (get strike settlement-options-ledger-entry))
-			(options-minted-amount (- (get last-token-id settlement-options-ledger-entry) (get first-token-id settlement-options-ledger-entry)))
+			(options-minted-amount (+ (- (get last-token-id settlement-options-ledger-entry) (get first-token-id settlement-options-ledger-entry)) u1))
 		)
-		(if (> strike stxusd-rate) 
+		(if (> stxusd-rate strike) 
 			;; Option is in-the-money, pnl is positive
 			(begin
 				(map-set options-ledger 
@@ -205,13 +210,13 @@
 					(merge
 						settlement-options-ledger-entry
 						{ 
-							option-pnl: (some (- strike stxusd-rate)), ;; TODO: Convert amount to STX
-							total-pnl: (some (* (- strike stxusd-rate) options-minted-amount)) ;; TODO: Convert amount to STX
+							option-pnl: (some (usd-to-stx (- stxusd-rate strike) stxusd-rate)), 
+							total-pnl: (some (usd-to-stx (* (- stxusd-rate strike) options-minted-amount) stxusd-rate))
 						}
 					)
 				)
-			;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
-			(try! (contract-call? .vault create-settlement-pool (* (- strike stxusd-rate) options-minted-amount) (as-contract tx-sender))) ;; TODO: Convert amount to STX
+				;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
+				(try! (contract-call? .vault create-settlement-pool (usd-to-stx (* (- stxusd-rate strike) options-minted-amount) stxusd-rate) (as-contract tx-sender)))
 			)
 			;; Option is out-of-the-money, pnl is zero
 			(map-set options-ledger 
@@ -254,7 +259,7 @@
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
 			(token-id (+ (var-get token-id-nonce) u1))
       (current-cycle-options-ledger-entry (try! (get-options-ledger-entry (var-get current-cycle-expiry))))
-			(stxusd-rate (unwrap! (get value (element-at entries u0)) ERR_RETRIEVING_STXUSD)) ;; had to take out the filter to pass test
+			(stxusd-rate (unwrap! (get value (element-at (filter is-stx entries) u0)) ERR_RETRIEVING_STXUSD)) ;; had to take out the filter to pass test
 		)
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
 		;; Check if options-nft are available for sale. The contract can only sell as many options-nfts as there are funds in the vault
@@ -371,9 +376,6 @@
 	)
 )
 
-
-
-
 ;; CONTRACT OWNERSHIP HELPER FUNCTIONS
 
 (define-public (set-contract-owner (new-owner principal))
@@ -429,7 +431,7 @@
 )
 
 (define-read-only (usd-to-stx (usd uint) (stxusd-rate uint))
-	(/ (* usd stacks-base) (/ stxusd-rate redstone-stacks-base-diff))
+	(/ (* usd stacks-base) stxusd-rate) 
 )
 
 (define-read-only (get-usd-price)
@@ -501,8 +503,8 @@
 			{ cycle-expiry: (get-current-cycle-expiry) } 
 			{ 
 			strike: strike, 
-			first-token-id: u0, 
-			last-token-id: u0,
+			first-token-id: u1, 
+			last-token-id: u1,
 			option-pnl: none,
 			total-pnl: none 
 			}
@@ -517,6 +519,10 @@
 
 (define-read-only (get-strike-for-expiry (cycle-expiry uint)) 
   (ok (get strike (unwrap! (map-get? options-ledger {cycle-expiry: cycle-expiry}) ERR_NO_INFO_FOR_EXPIRY)))
+)
+
+(define-read-only (get-option-pnl-for-expiry (cycle-expiry uint)) 
+  (ok (get option-pnl (unwrap! (map-get? options-ledger {cycle-expiry: cycle-expiry}) ERR_NO_INFO_FOR_EXPIRY)))
 )
 
 ;; options-for-sale
