@@ -40,7 +40,7 @@
 (define-data-var last-stxusd-rate (optional uint) none)
 
 ;; The unix timestamp of the expiry date of the current cycle
-(define-data-var current-cycle-expiry uint u1666368000) ;; set to Fri Oct 21 2022 16:00:00 GMT+0000
+(define-data-var current-cycle-expiry uint u1666368000000) ;; set to Fri Oct 21 2022 16:00:00 GMT+0000
 ;; A map that holds the relevant data points for each batch of options issued by the contract
 ;; TODO: Remove total-pnl (can be computed from remaining data points)
 ;; TODO: Add price-in-usd? Since auction can have multiple prices do we need to store start and end price, average price? (NOTE: all transactions can be viewed and analyzed on chain)
@@ -98,7 +98,6 @@
 		(var-set last-stxusd-rate (get value (element-at entries u0))) ;; TODO: check if stxusd is always the first entry in the list after filtering
 		(var-set last-seen-timestamp timestamp)		
 
-		
 		(if current-cycle-expired
 			(try! (end-current-cycle))
 			true

@@ -3,7 +3,7 @@ import { Clarinet, Tx, Chain, Account, types, assertEquals, shiftPriceValue, lit
 import type { PricePackage, Block } from "./deps.ts";
 import axiod from "https://deno.land/x/axiod@0.26.2/mod.ts";
 import { redstoneDataOneMinApart } from "./redstone-data.ts";
-import { createTwoDepositors, initAuction, initMint, setTrustedOracle, submitPriceData } from "./init.ts";
+import { createTwoDepositors, initAuction, initMint, setTrustedOracle, submitPriceData, submitPriceDataAndTest } from "./init.ts";
 
 const contractOwner = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM"
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
@@ -26,7 +26,6 @@ const testOutOfTheMoneyStrikePriceMultiplier = 1.15
 const testInTheMoneyStrikPriceMultiplier = 0.8
 
 // Testing setting trusted oracle
-
 Clarinet.test({
 	name: "Ensure that the contract owner can set trusted oracle",
 	fn(chain: Chain, accounts: Map<string, Account>) {
@@ -42,7 +41,6 @@ Clarinet.test({
 });
 
 // Testing recover-signer
-
 Clarinet.test({
     name: "Ensure that the price package is signed by the same pubkey on every call",
     async fn(chain: Chain, accounts: Map<string, Account>) {
@@ -82,11 +80,11 @@ Clarinet.test({
 });
 
 // Testing submit-price-data
-
 Clarinet.test({
 	name: "Ensure that anyone can submit price data signed by trusted oracles",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
-		const [deployer, accountA] = ["deployer", "wallet_1"].map(who => accounts.get(who)!);
+		const [accountA] = ["wallet_1"].map(who => accounts.get(who)!);
+		
 		const block = submitPriceData(chain, accountA.address, redstoneDataOneMinApart[0])
     block.receipts[0].result.expectOk().expectBool(true);
 
@@ -96,7 +94,7 @@ Clarinet.test({
 			[],
 			accountA.address
 		)
-		assertEquals(lastSeenTimestamp.result, redstoneDataOneMinApart[0].timestamp)
+		assertEquals(lastSeenTimestamp.result, types.utf8(redstoneDataOneMinApart[0].timestamp))
 
 		const lastSTXUSDdRate = chain.callReadOnlyFn(
 			"options-nft",
@@ -104,12 +102,11 @@ Clarinet.test({
 			[],
 			accountA.address
 		)
-		assertEquals(lastSTXUSDdRate.result, types.some(types.uint(redstoneDataOneMinApart[0].value * 100000000)))
+		assertEquals(lastSTXUSDdRate.result, types.some(types.uint(shiftPriceValue(redstoneDataOneMinApart[0].value))))
 	},
 });
 
 // Testing auction initalization outside of init-next-cycle
-
 Clarinet.test({
 	name: "Ensure that the options-nft auction is properly initialized",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
@@ -177,7 +174,6 @@ Clarinet.test({
 });
 
 // Testing mint function
-
 Clarinet.test({
 	name: "Ensure that the mint function works for the right inputs",
 	async fn(chain: Chain, accounts: Map<string, Account>) {

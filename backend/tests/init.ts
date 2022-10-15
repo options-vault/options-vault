@@ -127,7 +127,7 @@ export function submitPriceDataAndTest(
 			[],
 			submitterAddress
 		)
-		assertEquals(lastSTXUSDdRate.result, types.some(types.uint(pricePackage.prices[0].value * 100000000)))
+		assertEquals(lastSTXUSDdRate.result, types.some(types.uint(shiftPriceValue(pricePackage.prices[0].value))))
     
     return block;
 }
