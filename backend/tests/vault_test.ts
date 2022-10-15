@@ -21,8 +21,6 @@ Clarinet.test({
 Clarinet.test({
     name: "Ensure that non user cannot withdraw",
     fn(chain: Chain, accounts: Map<string, Account>) {
-        const wallet_1 = accounts.get('wallet_1')?.address ?? ""
-        const wallet_2 = accounts.get('wallet_2')?.address ?? ""
         const wallet_3 = accounts.get('wallet_3')?.address ?? ""
 
         let block = createTwoDepositorsAndProcess(chain, accounts)
@@ -37,8 +35,6 @@ Clarinet.test({
     name: "Ensure that user can withdraw their whole account",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const wallet_1 = accounts.get('wallet_1')?.address ?? ""
-        const wallet_2 = accounts.get('wallet_2')?.address ?? ""
-        const wallet_3 = accounts.get('wallet_3')?.address ?? ""
 
         let block = createTwoDepositorsAndProcess(chain, accounts)
 
@@ -52,7 +48,6 @@ Clarinet.test({
 Clarinet.test({
     name: "Ensure that user can withdraw part of their account",
     fn(chain: Chain, accounts: Map<string, Account>) {
-        const wallet_1 = accounts.get('wallet_1')?.address ?? ""
         const wallet_2 = accounts.get('wallet_2')?.address ?? ""
 
         let block = createTwoDepositorsAndProcess(chain, accounts)
@@ -94,4 +89,41 @@ Clarinet.test({
         ])
         block.receipts[0].result.expectOk()
         block.receipts[1].events.expectSTXTransferEvent(1000000, vaultContract, wallet_1)
+}})
+
+Clarinet.test({
+    name: "Ensure that ledger entry is set correctly during deposits",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const wallet_1 = accounts.get('wallet_1')?.address ?? ""
+        const wallet_2 = accounts.get('wallet_2')?.address ?? ""
+
+        let block = createTwoDepositorsAndProcess(chain, accounts)
+
+        // expect wallet 1 has 1 stack, wallet 2 has 2 in ledger
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1).result.expectSome().expectUint(1000000);
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_2).result.expectSome().expectUint(2000000);
+
+}})
+
+Clarinet.test({
+    name: "Ensure that ledger entry is set correctly during withdrawals",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const wallet_1 = accounts.get('wallet_1')?.address ?? ""
+        const wallet_2 = accounts.get('wallet_2')?.address ?? ""
+
+        let block = createTwoDepositorsAndProcess(chain, accounts)
+
+        block = chain.mineBlock([
+            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
+            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1)
+        ])
+
+        // user 1 has withdrawn their whole account already, expect they are not in ledger
+        console.log(chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1));
+        console.log(chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_2));
+        
+
+        // user 2 has withdrawn half of their account, expect they halve 1 stack left
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_2).result.expectSome().expectUint(1000000);
+
 }})
