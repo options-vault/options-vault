@@ -229,9 +229,9 @@ Clarinet.test({
 	},
 });
 
-// Test end-current-cycle function for out of the money option
+// Test end-current-cycle function for an out-of-the-money option
 Clarinet.test({
-	name: "Ensure that the end-current-cycle function works for out of the money option",
+	name: "Ensure that the end-current-cycle function works for an out-of-the-money option",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 		
@@ -258,9 +258,9 @@ Clarinet.test({
 	}
 })
 
-// Test end-current-cycle function for in the money option
+// Test end-current-cycle function for in-the-money option
 Clarinet.test({
-	name: "Ensure that the end-current-cycle function works for in the money option",
+	name: "Ensure that the end-current-cycle function works for an in-the-money option",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 
@@ -277,6 +277,7 @@ Clarinet.test({
 		)
 		assertEquals(totalBalances.result, types.uint(3000000))
 
+		// Initialize the first auction; the strike price is in-the-money (below spot)
 		block = initFirstAuction(
 			chain, 
 			deployer.address,
@@ -287,6 +288,7 @@ Clarinet.test({
 		);
 		assertEquals(block.receipts.length, 5);
 
+		// Mint two options-nfts
 		block = initMint(
 			chain, 
 			accountA.address, 
@@ -294,37 +296,26 @@ Clarinet.test({
 			redstoneDataOneMinApart
 		)
 		assertEquals(block.receipts.length, 2);
-
+		
+		// Submit price data that is slightly after the current-cycle-expiry 
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
-		// CLG
-		console.log(block.receipts[0].events)
 		block.receipts[0].result.expectOk().expectBool(true);
+		// Since the option was in-the-money, we expect a settlement tx that sends all STX
+		// owed to NFT holders from the vaultContract to the optionsNFTContract
+		block.receipts[0].events.expectSTXTransferEvent(389389, vaultContract, optionsNFTContract)
 
-		const optionsPnlUSD = chain.callReadOnlyFn(
+		// We read the options-pnl from the on-chain ledger
+		const optionsPnlSTXFromLedger = chain.callReadOnlyFn(
 			"options-nft",
 			"get-option-pnl-for-expiry",
 			[types.uint(testCycleExpiry)],
 			deployer.address
 		)
-
-		optionsPnlUSD.result.expectOk().expectSome()
-		// CLG
-		console.log(optionsPnlUSD.result.expectOk().expectSome())
-
-		const optionsPnlSTX = chain.callReadOnlyFn(
-			"options-nft",
-			"usd-to-stx",
-			[
-				types.uint(expectedOptionsPnlUSD),
-				types.uint(lastestStxusdRate)
-			],
-			deployer.address
+		optionsPnlSTXFromLedger.result.expectOk().expectSome()
+		// And compare the on-chain ledger entry to the number we would expect from our input values
+		assertEquals(
+			optionsPnlSTXFromLedger.result.expectOk().expectSome(), 
+			types.uint(Math.floor(expectedOptionsPnlUSD / lastestStxusdRate * 1000000))
 		)
-		assertEquals(optionsPnlUSD.result.expectOk().expectSome(), optionsPnlSTX.result)
-		// CLG
-		console.log(optionsPnlSTX.result)
-		// assertEquals(optionsPnlSTX.result, types.uint(20000))
-
-
 	}
 })
