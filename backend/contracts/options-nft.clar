@@ -19,6 +19,7 @@
 (define-constant ERR_PROCESS_WITHDRAWALS (err u122))
 (define-constant ERR_RETRIEVING_STXUSD (err u123))
 (define-constant ERR_UPDATE_PRICE_FAILED (err u124))
+(define-constant ERR_READING_STXUSD (err u125))
 
 (define-data-var contract-owner principal tx-sender)
 
@@ -26,7 +27,7 @@
 (define-data-var token-id-nonce uint u0)
 
 ;; TODO: Ensure that all uints are adjusted to different bases 
-(define-constant symbol-stxusd 0x535458555344) ;; "STXUSD" as a buff
+(define-constant symbol-stxusd 0x535458555344) ;; "STXUSD" as a buff; TODO: change to "STX" as a buff
 (define-constant redstone-value-shift u100000000)
 (define-constant stacks-base u1000000)
 (define-constant redstone-stacks-base-diff (/ redstone-value-shift stacks-base))
@@ -40,7 +41,7 @@
 (define-data-var last-stxusd-rate (optional uint) none)
 
 ;; The unix timestamp of the expiry date of the current cycle
-(define-data-var current-cycle-expiry uint u1665763200) ;; set to Fri Oct 14 2022 16:00:00 GMT+0000
+(define-data-var current-cycle-expiry uint u1666368000000) ;; set to Fri Oct 21 2022 16:00:00 GMT+0000
 ;; A map that holds the relevant data points for each batch of options issued by the contract
 ;; TODO: Remove total-pnl (can be computed from remaining data points)
 ;; TODO: Add price-in-usd? Since auction can have multiple prices do we need to store start and end price, average price? (NOTE: all transactions can be viewed and analyzed on chain)
@@ -95,10 +96,9 @@
 		(asserts! (> timestamp (get-last-block-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than the last block timestamp.
 		(asserts! (>= timestamp (var-get last-seen-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than or equal to the last seen timestamp.
 
-		(var-set last-stxusd-rate (get value (element-at (filter is-stxusd entries) u0))) ;; TODO: check if stxusd is always the first entry in the list after filtering
+		(var-set last-stxusd-rate (get value (element-at entries u0))) ;; TODO: check if stxusd is always the first entry in the list after filtering
 		(var-set last-seen-timestamp timestamp)		
 
-		
 		(if current-cycle-expired
 			(try! (end-current-cycle))
 			true
@@ -144,7 +144,7 @@
 (define-private (init-next-cycle) 
 	(let 
 		(
-			(stxusd-rate (unwrap! (var-get last-stxusd-rate) (err u7)))
+			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD))
 			(strike (calculate-strike stxusd-rate)) ;; simplified calculation for mvp scope
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-milliseconds))
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
@@ -183,11 +183,11 @@
 (define-private (determine-value-and-settle)
 	(let
 		(
-			(stxusd-rate (unwrap-panic (var-get last-stxusd-rate)))
+			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD))
 			(settlement-expiry (var-get current-cycle-expiry))
 	  	(settlement-options-ledger-entry (try! (get-options-ledger-entry settlement-expiry)))
     	(strike (get strike settlement-options-ledger-entry))
-			(options-minted-amount (- (get first-token-id settlement-options-ledger-entry) (get last-token-id settlement-options-ledger-entry)))
+			(options-minted-amount (- (get last-token-id settlement-options-ledger-entry) (get first-token-id settlement-options-ledger-entry)))
 		)
 		(if (> strike stxusd-rate) 
 			;; Option is in-the-money, pnl is positive
