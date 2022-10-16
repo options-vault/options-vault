@@ -181,23 +181,21 @@
           (investor-balance (get balance investor-info))
           (investor-pending-withdrawal (get pending-withdrawal investor-info))
           (investor-address (get address investor-info))
+          (investor-withdrawal-allowed (if (> investor-pending-withdrawal investor-balance) investor-balance investor-pending-withdrawal))
         )
-        (if (and 
-              (>= investor-balance investor-pending-withdrawal)
-              (> investor-pending-withdrawal u0)
-            )
+        (if (> investor-pending-withdrawal u0)
             ;; if investor's balance is equal or greater than its pending-withdrawal amount
             ;; and investor's pending-withdrawal amount is greater than 0
             (begin
-              (try! (as-contract (stx-transfer? investor-pending-withdrawal tx-sender investor-address)))
-              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
+              (try! (as-contract (stx-transfer? investor-withdrawal-allowed tx-sender investor-address)))
+              (var-set total-balances (- (var-get total-balances) investor-withdrawal-allowed))
               (map-set ledger
                 investor
                 (merge
                   investor-info
                   {
                     balance: 
-                      (substract-to-balance investor-pending-withdrawal investor),
+                      (substract-to-balance investor-withdrawal-allowed investor),
                     pending-withdrawal:
                       u0
                   }  
@@ -211,24 +209,7 @@
               )
             )
             ;; if false, tranfers what is in the balance to the investor and delete the investor from the ledger and the investor's list
-            (begin
-              (try! (as-contract (stx-transfer? investor-balance tx-sender investor-address)))
-              (var-set total-balances (- (var-get total-balances) investor-balance))
-              (map-set ledger
-                investor
-                (merge
-                  investor-info
-                  {
-                    balance: 
-                      u0,
-                    pending-withdrawal:
-                      u0
-                  }  
-                )
-              )
-              (is-eq (get balance (unwrap-panic (map-get? ledger investor))) u0)
-              (map-delete ledger investor)
-            )
+            true
         )
         (ok true)
   )

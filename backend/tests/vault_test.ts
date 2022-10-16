@@ -17,6 +17,7 @@ const errorCodes = {
 Clarinet.test({
     name: "Ensure that users can deposit and their funds are processed",
     fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
 		const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
         let block = createTwoDepositorsAndProcess(chain, accounts)
@@ -24,8 +25,9 @@ Clarinet.test({
         block.receipts[0].events.expectSTXTransferEvent(1000000, wallet_1, vaultContract)
         block.receipts[1].events.expectSTXTransferEvent(2000000, wallet_2, vaultContract)
         block.receipts[2].result.expectOk();
-        // TODO check contract balance
-        //console.log(block.receipts[0].events[0])
+
+        // total-balances has to equals to u1000000 or 1 STX
+        chain.callReadOnlyFn('vault', 'get-total-balances', [], deployer).result.expectUint(3000000);
     },
 });
 
@@ -121,27 +123,22 @@ Clarinet.test({
 Clarinet.test({
     name: "Ensure that ledger entry is set correctly during withdrawals",
     fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
 
-        let block = createTwoDepositorsAndProcess(chain, accounts)
+        let block = createTwoDepositorsAndProcess(chain, accounts);
 
         block = chain.mineBlock([
-            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
-            Tx.contractCall("vault", "process-withdrawals", [], wallet_1),
-
+            Tx.contractCall("vault", "queue-withdrawal", [ types.uint(1000000) ], wallet_1),
+            Tx.contractCall("vault", "process-withdrawals", [], deployer),
         ])
 
-        // TODO make so ledger reads null rather than zero when user has completely withdrawn
-        
-         // user 1 has withdrawn their whole account already, expect they are not in ledger
+        // user 1 has withdrawn their whole account already, expect they are not in ledger
         chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_1) ], wallet_1).result.expectNone();
-        // user is actually in ledger with 0 microstacks
-        // chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1).result.expectSome().expectUint(0);
 
         // but user 2 still has their 2 stacks
         chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_2) ], wallet_2).result.expectSome().expectUint(2000000);
-
 }})
 
 Clarinet.test({
