@@ -210,8 +210,25 @@
                 true
               )
             )
-            ;; if false just pass
-            true
+            ;; if false, tranfers what is in the balance to the investor and delete the investor from the ledger and the investor's list
+            (begin
+              (try! (as-contract (stx-transfer? investor-balance tx-sender investor-address)))
+              (var-set total-balances (- (var-get total-balances) investor-balance))
+              (map-set ledger
+                investor
+                (merge
+                  investor-info
+                  {
+                    balance: 
+                      u0,
+                    pending-withdrawal:
+                      u0
+                  }  
+                )
+              )
+              (is-eq (get balance (unwrap-panic (map-get? ledger investor))) u0)
+              (map-delete ledger investor)
+            )
         )
         (ok true)
   )
