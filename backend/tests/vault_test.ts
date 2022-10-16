@@ -10,9 +10,8 @@ const errorCodes = {
     INSUFFICIENT_FUNDS : 102,
     TX_SENDER_NOT_IN_LEDGER : 103,
     ONLY_CONTRACT_ALLOWED : 104,
-    HAS_TO_WAIT_UNTIL_NEXT_BLOCK : 105,
-    TX_NOT_APPLIED_YET : 106,
-    PREMIUM_NOT_SPLITTED_CORRECTLY : 107,
+    TX_NOT_APPLIED_YET : 105,
+    PREMIUM_NOT_SPLITTED_CORRECTLY : 106,
 }
 
 Clarinet.test({
@@ -159,7 +158,7 @@ Clarinet.test({
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
             Tx.contractCall("vault", "process-withdrawals", [], wallet_1),
         ])
-        
+
         // TODO find out why result of get-ledger-entry is just a number, not a whole object with pending etc
 
         // user 1 has withdrawn their whole account already, expect they are not in ledger
@@ -193,13 +192,13 @@ Clarinet.test({
 		const wallet_1 = accounts.get('wallet_1')!.address;
 
         let block = chain.mineBlock([
-            Tx.contractCall("vault", "distribute-pnl", [], wallet_1),
+            Tx.contractCall("vault", "distribute-pnl", [ types.bool(true) ], wallet_1),
         ])
 
-        console.log(block.receipts[0])
+        // console.log(block.receipts[0])
 
-        // ERR INVALID AMOUNT
-        block.receipts[0].result.expectErr().expectUint(errorCodes.HAS_TO_WAIT_UNTIL_NEXT_BLOCK)
+        // ERR TX NOT APPLIED YET
+        block.receipts[0].result.expectErr().expectUint(errorCodes.TX_NOT_APPLIED_YET);
     }
 })
 

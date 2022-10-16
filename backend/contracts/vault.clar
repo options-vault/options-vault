@@ -9,9 +9,8 @@
 (define-constant INSUFFICIENT_FUNDS (err u102))
 (define-constant TX_SENDER_NOT_IN_LEDGER (err u103))
 (define-constant ONLY_CONTRACT_ALLOWED (err u104))
-(define-constant HAS_TO_WAIT_UNTIL_NEXT_BLOCK (err u105))
-(define-constant TX_NOT_APPLIED_YET (err u106))
-(define-constant PREMIUM_NOT_SPLITTED_CORRECTLY (err u107))
+(define-constant TX_NOT_APPLIED_YET (err u105))
+(define-constant PREMIUM_NOT_SPLITTED_CORRECTLY (err u106))
 
 ;; data maps and vars
 
