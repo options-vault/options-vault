@@ -67,11 +67,10 @@
 (define-data-var settlement-block-height uint u0) 
 (define-data-var settlement-tx-in-mempool bool false) ;; TODO: Write init-first-cycle where this is set to true and set it to false by default
 
-;; TODO Change into milliseconds
-
 (define-constant week-in-milliseconds u604800000)
 (define-constant min-in-milliseconds u60000)
 
+;; TODO: 
 
 ;; TODO: Check units for all STX transactions (mint, settlement), priced in USD but settled in STX
 ;; --> Should the option be priced in STX to the end user? (like on Deribit)
@@ -100,20 +99,20 @@
 		(var-set last-stxusd-rate (get value (element-at (filter is-stx entries) u0))) ;; TODO: check if stxusd is always the first entry in the list after filtering
 		(var-set last-seen-timestamp timestamp)		
 
-		(if (and 
+		(if (and
 			current-cycle-expired
 			(not (var-get settlement-tx-in-mempool))
-			)	
+			)
 				(try! (end-current-cycle))
 				true
 		)
 
 		(if (and 
 			current-cycle-expired 
-			(> block-height (var-get settlement-block-height))
+			(> block-height (var-get settlement-block-height)) ;; TODO rename to settlement-tx-broadcast-block-height
 			) 
 				(begin
-					(try! (contract-call? .vault distribute-pnl))
+					(try! (contract-call? .vault distribute-pnl (var-get settlement-tx-in-mempool)))
 					(unwrap! (contract-call? .vault process-deposits) ERR_PROCESS_DEPOSITS)
 					(unwrap! (contract-call? .vault process-withdrawals) ERR_PROCESS_WITHDRAWALS)
 					(unwrap! (init-next-cycle) ERR_CYCLE_INIT_FAILED) 
@@ -262,12 +261,13 @@
 			(stxusd-rate (unwrap! (get value (element-at (filter is-stx entries) u0)) ERR_RETRIEVING_STXUSD)) ;; had to take out the filter to pass test
 		)
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
-		;; Check if options-nft are available for sale. The contract can only sell as many options-nfts as there are funds in the vault
+		;; Check if an options-nft is available for sale. 
+		;; The contract can only sell as many options-nfts as there are funds in the vault
 		(asserts! (> (var-get options-for-sale) u0) ERR_OPTIONS_SOLD_OUT)
 		;; Check if auciton has run for more than 180 minutes, this ensures that the auction never runs longer than 3 hours thus reducing delta risk
 		;; (i.e. the risk of a unfavorable change in the price of the underlying asset)
 		(asserts! (< timestamp (+ (var-get auction-start-time) (* min-in-milliseconds u180))) ERR_AUCTION_CLOSED)
-		;; Update the mint price based on where in the 180 min minting window we are 
+		;; Update the mint price based on where in the 180 min minting window we are
 		(unwrap! (update-options-price-in-usd timestamp) ERR_UPDATE_PRICE_FAILED)
 		;; Update the token ID nonce
 		(var-set token-id-nonce token-id)
@@ -276,7 +276,7 @@
 		;; Mint the NFT
 		(try! (nft-mint? options-nft token-id tx-sender))
 		;; Update last-token-id in the options-ledger with the token-id of the minted NFT
-		(map-set options-ledger 
+		(map-set options-ledger
 			{ cycle-expiry: (var-get current-cycle-expiry) } 
 			(merge
 				current-cycle-options-ledger-entry
@@ -309,8 +309,7 @@
 			(option-pnl (get option-pnl settlement-options-ledger-entry))
 			(first-token-id (get first-token-id settlement-options-ledger-entry)) 
 			(last-token-id (get last-token-id settlement-options-ledger-entry))
-
-    ) 
+    )
 		;; Check if the signer is a trusted oracle
     (asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
 		;; Check if provided token-id is in the range for the expiry
@@ -318,14 +317,17 @@
 		;; Check if options is expired
 		(asserts! (> timestamp token-expiry) ERR_OPTION_NOT_EXPIRED) 
 		
+		;; Check if the option-pnl amount has been entered (some value). 
+		;; A (some value) indicates that set-and-determine-value has 
+		;; calculated a pnl after the contract has expired.
+
 		(match option-pnl
 			payout
-			;; check that the option-pnl is great than zero
 			(begin
 				;; Transfer options NFT to settlement contract
 				(try! (transfer token-id tx-sender (as-contract tx-sender)))
-				;; Transfer STX to tx-sender
-				(try! (as-contract (stx-transfer? (unwrap-panic option-pnl) tx-sender recipient)))
+				;; Transfer STX out of th settlement pool to tx-sender
+				(try! (as-contract (stx-transfer? payout tx-sender recipient)))
 				(ok true)
 			)
 			ERR_OPTION_NOT_EXPIRED
@@ -453,7 +455,7 @@
 	(var-get last-stxusd-rate)
 )
 
-;; (!) For testing purposes only, delete for deployment (!)
+;; (!) For testing purposes, delete setter functions for deployment to improve contract security (!)
 
 ;; auction-start-time
 ;; #[allow(unchecked_data)]

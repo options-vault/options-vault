@@ -9,10 +9,10 @@ const errorCodes = {
     VAULT_NOT_ALLOWED : 101,
     INSUFFICIENT_FUNDS : 102,
     TX_SENDER_NOT_IN_LEDGER : 103,
-ONLY_CONTRACT_ALLOWED : 104,
-HAS_TO_WAIT_UNTIL_NEXT_BLOCK : 105,
-TX_NOT_APPLIED_YET : 106,
-PREMIUM_NOT_SPLITTED_CORRECTLY : 107,
+    ONLY_CONTRACT_ALLOWED : 104,
+    HAS_TO_WAIT_UNTIL_NEXT_BLOCK : 105,
+    TX_NOT_APPLIED_YET : 106,
+    PREMIUM_NOT_SPLITTED_CORRECTLY : 107,
 }
 
 Clarinet.test({
@@ -184,6 +184,8 @@ Clarinet.test({
         block.receipts[0].result.expectErr().expectUint(errorCodes.INVALID_AMOUNT)
 }})
 
+<<<<<<< HEAD
+<<<<<<< HEAD
 Clarinet.test({
     name: "Ensure that distribute pnl can only be called during the right time",
     fn(chain: Chain, accounts: Map<string, Account>) {
@@ -208,3 +210,14 @@ Clarinet.test({
 
     }
 })
+=======
+=======
+>>>>>>> 4e616e526bfa28fc06ef1b37316f67a4e83d8ab6
+
+// Test deposit-premium
+// Test distribute-pnl
+// Test create-settlement-pool
+<<<<<<< HEAD
+>>>>>>> 4e616e526bfa28fc06ef1b37316f67a4e83d8ab6
+=======
+>>>>>>> 4e616e526bfa28fc06ef1b37316f67a4e83d8ab6
