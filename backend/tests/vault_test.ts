@@ -8,10 +8,10 @@ const errorCodes = {
     VAULT_NOT_ALLOWED : 101,
     INSUFFICIENT_FUNDS : 102,
     TX_SENDER_NOT_IN_LEDGER : 103,
-ONLY_CONTRACT_ALLOWED : 104,
-HAS_TO_WAIT_UNTIL_NEXT_BLOCK : 105,
-TX_NOT_APPLIED_YET : 106,
-PREMIUM_NOT_SPLITTED_CORRECTLY : 107,
+    ONLY_CONTRACT_ALLOWED : 104,
+    HAS_TO_WAIT_UNTIL_NEXT_BLOCK : 105,
+    TX_NOT_APPLIED_YET : 106,
+    PREMIUM_NOT_SPLITTED_CORRECTLY : 107,
 }
 
 Clarinet.test({
@@ -209,3 +209,8 @@ Clarinet.test({
         // ERR INVALID AMOUNT
         block.receipts[0].result.expectErr().expectUint(errorCodes.INVALID_AMOUNT)
 }})
+
+
+// Test deposit-premium
+// Test distribute-pnl
+// Test create-settlement-pool
