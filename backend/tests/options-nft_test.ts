@@ -435,4 +435,8 @@ Clarinet.test({
 	}
 })
 
-
+// Test distribute-pnl
+// Test process-deposits
+// Test process-withdrawals
+// Test init-next-cycle
+// Test claim

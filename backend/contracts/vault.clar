@@ -25,7 +25,7 @@
 
 (define-data-var total-pending-deposits uint u0)
 
-(define-data-var block-height-settlement uint u0)
+(define-data-var settlement-block-height uint u0)
 
 ;; private functions
 
@@ -244,19 +244,24 @@
 ;; PNL FUNCTIONS
 
 ;;<distribute-pnl>: Distributes the premium between all the investor in the vault according to their participation rate
-(define-public (distribute-pnl)
+(define-public (distribute-pnl (settlement-tx-confirmed bool))
   (begin
-    ;; (asserts! (is-eq CONTRACT_ADDRESS tx-sender) ONLY_CONTRACT_ALLOWED)
-    (asserts! (> (var-get block-height-settlement) block-height) HAS_TO_WAIT_UNTIL_NEXT_BLOCK)
-    ;; assert that balance at block-height-settlement is not equal to balance block-height (now)
-    ;; to handle edge case where the settlement transaction was broadcast but was not mined in the first block
-    (asserts! 
-      (not (is-eq 
-        (stx-get-balance CONTRACT_ADDRESS)
-        (at-block (unwrap-panic (get-block-info? id-header-hash (var-get block-height-settlement))) (stx-get-balance CONTRACT_ADDRESS))
-      ))
-      TX_NOT_APPLIED_YET
+    ;; ;; (asserts! (is-eq CONTRACT_ADDRESS tx-sender) ONLY_CONTRACT_ALLOWED)
+    (if settlement-tx-confirmed
+      (begin
+        ;; to handle edge case where the settlement transaction was broadcast but was not mined in the first block
+        (asserts! 
+          (not (is-eq 
+            (stx-get-balance CONTRACT_ADDRESS)
+            ;; (at-block (unwrap-panic (get-block-info? id-header-hash (var-get settlement-block-height))) (stx-get-balance CONTRACT_ADDRESS))
+            (- (var-get temp-total-balances) (var-get total-pending-deposits))
+          ))
+          TX_NOT_APPLIED_YET
+        )
+      )
+      true
     )
+    ;; TODO: Add assert that the function can only called by the options-nft contract
     (var-set temp-total-balances (var-get total-balances))
     (map pnl-evaluator (var-get investor-addresses))
     (asserts! (is-eq (var-get total-balances) (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits))) PREMIUM_NOT_SPLITTED_CORRECTLY)
@@ -303,7 +308,7 @@
 (define-public (create-settlement-pool (amount uint) (settlement-contract principal))
   (begin
     (asserts! (> amount u0) INVALID_AMOUNT)
-    (var-set block-height-settlement block-height)
+    (var-set settlement-block-height block-height)
     (try! (as-contract (stx-transfer? amount tx-sender settlement-contract)))
     (ok true)
   )
