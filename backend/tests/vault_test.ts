@@ -114,8 +114,8 @@ Clarinet.test({
         let block = createTwoDepositorsAndProcess(chain, accounts)
 
         // expect wallet 1 has 1 stack, wallet 2 has 2 in ledger
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1).result.expectSome().expectUint(1000000);
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_2).result.expectSome().expectUint(2000000);
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_1) ], wallet_1).result.expectSome().expectUint(1000000);
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_2) ], wallet_2).result.expectSome().expectUint(2000000);
 
 }})
 
@@ -136,18 +136,19 @@ Clarinet.test({
         // TODO make so ledger reads null rather than zero when user has completely withdrawn
         
          // user 1 has withdrawn their whole account already, expect they are not in ledger
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1).result.expectNone();
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_1) ], wallet_1).result.expectNone();
         // user is actually in ledger with 0 microstacks
         // chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1).result.expectSome().expectUint(0);
 
         // but user 2 still has their 2 stacks
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_2).result.expectSome().expectUint(2000000);
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_2) ], wallet_2).result.expectSome().expectUint(2000000);
 
 }})
 
 Clarinet.test({
     name: "Ensure that the two users can queue withdrawal on same block as process withdrawals",
     fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
 
@@ -157,17 +158,18 @@ Clarinet.test({
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
             Tx.contractCall("vault", "process-withdrawals", [], wallet_1),
-
         ])
-        // TODO find out why two queueu withdrawals and then prcess fails, but one works
-
+        
         // TODO find out why result of get-ledger-entry is just a number, not a whole object with pending etc
 
-         // user 1 has withdrawn their whole account already, expect they are not in ledger
-         chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1).result.expectSome().expectUint(0);
+        // user 1 has withdrawn their whole account already, expect they are not in ledger
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_1) ], wallet_1).result.expectNone();
 
         // but user 2 still has 1 stack left
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_2).result.expectSome().expectUint(1000000);
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_2) ], wallet_2).result.expectSome().expectUint(1000000);
+
+        // total-balances has to equals to u1000000 or 1 STX
+        chain.callReadOnlyFn('vault', 'get-total-balances', [], deployer).result.expectUint(1000000);
 }})
 
 
@@ -184,8 +186,7 @@ Clarinet.test({
         block.receipts[0].result.expectErr().expectUint(errorCodes.INVALID_AMOUNT)
 }})
 
-<<<<<<< HEAD
-<<<<<<< HEAD
+
 Clarinet.test({
     name: "Ensure that distribute pnl can only be called during the right time",
     fn(chain: Chain, accounts: Map<string, Account>) {
@@ -210,14 +211,7 @@ Clarinet.test({
 
     }
 })
-=======
-=======
->>>>>>> 4e616e526bfa28fc06ef1b37316f67a4e83d8ab6
 
 // Test deposit-premium
 // Test distribute-pnl
 // Test create-settlement-pool
-<<<<<<< HEAD
->>>>>>> 4e616e526bfa28fc06ef1b37316f67a4e83d8ab6
-=======
->>>>>>> 4e616e526bfa28fc06ef1b37316f67a4e83d8ab6

@@ -32,18 +32,18 @@
 ;; Functions that checks what is the user's balance/pending-withdrawal/pending-deposit in the vault
 
 ;; Balance helper functions
-(define-read-only (get-ledger-entry)
-  (get balance (map-get? ledger tx-sender))
+(define-read-only (get-ledger-entry (investor principal))
+  (get balance (map-get? ledger investor))
 )
 
-(define-private (add-to-balance (amount uint)) 
-  (+ (default-to u0 (get-ledger-entry)) amount)
+(define-private (add-to-balance (amount uint) (investor principal)) 
+  (+ (default-to u0 (get-ledger-entry investor)) amount)
 )
 
-(define-private (substract-to-balance (amount uint)) 
-  (- (default-to u0 (get-ledger-entry)) amount)
+(define-private (substract-to-balance (amount uint) (investor principal)) 
+  (- (default-to u0 (get-ledger-entry investor)) amount)
 )
-
+;; TODO: Check if there is neccesary to add investor as parameter for each helper function
 ;; Deposit helper functions
 (define-read-only (get-pending-deposit) 
   (default-to u0 (get pending-deposits (map-get? ledger tx-sender)))
@@ -198,13 +198,13 @@
                   investor-info
                   {
                     balance: 
-                      (substract-to-balance investor-pending-withdrawal),
+                      (substract-to-balance investor-pending-withdrawal investor),
                     pending-withdrawal:
                       u0
                   }  
                 )
               )
-              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
+              ;; (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
               (if 
                 (is-eq (get balance (unwrap-panic (map-get? ledger investor))) u0)
                 (map-delete ledger investor)
@@ -222,7 +222,7 @@
 ;;                     which will be executed at the end of the current cycle
 (define-public (queue-withdrawal (amount uint)) 
   (let  (
-          (investor-balance (unwrap! (get-ledger-entry) TX_SENDER_NOT_IN_LEDGER))
+          (investor-balance (unwrap! (get-ledger-entry tx-sender) TX_SENDER_NOT_IN_LEDGER))
           (investor-pending-withdrawal (get-pending-withdrawal))
           (investor-info (unwrap-panic (map-get? ledger tx-sender)))
         )
