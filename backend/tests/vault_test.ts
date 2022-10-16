@@ -1,7 +1,8 @@
 import { Clarinet, Tx, Chain, Account, types } from 'https://deno.land/x/clarinet@v1.0.2/index.ts';
 import { assert, assertEquals } from 'https://deno.land/std@0.90.0/testing/asserts.ts';
-import { createTwoDepositorsAndProcess } from "./init.ts"
+import { createTwoDepositorsAndProcess, submitPriceData, initFirstAuction, redstoneDataOneMinApart, CreateAlreadyActiveAndMintingAuction } from "./init.ts"
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
+import { testConfig, createMintingAuction } from './init.ts';
 
 const errorCodes = {
     INVALID_AMOUNT : 100,
@@ -145,7 +146,7 @@ Clarinet.test({
 }})
 
 Clarinet.test({
-    name: "Putting more than one queue withdrawal on the same block fails!?",
+    name: "Ensure that the two users can queue withdrawal on same block as process withdrawals",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
@@ -169,33 +170,6 @@ Clarinet.test({
         chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_2).result.expectSome().expectUint(1000000);
 }})
 
-Clarinet.test({
-    name: "Two separate queue withdrawals on different blocks still fails!?",
-    fn(chain: Chain, accounts: Map<string, Account>) {
-        const wallet_1 = accounts.get('wallet_1')!.address;
-		const wallet_2 = accounts.get('wallet_2')!.address;
-
-        let block = createTwoDepositorsAndProcess(chain, accounts)
-
-        block = chain.mineBlock([
-            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
-            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
-            
-        ])
-        block = chain.mineBlock([
-            Tx.contractCall("vault", "process-withdrawals", [], wallet_1),
-        ])
-
-        // TODO find out why two queueu withdrawals and then prcess fails, but one works
-
-        // TODO find out why result of get-ledger-entry is just a number, not a whole object with pending etc
-
-         // user 1 has withdrawn their whole account already, expect they are not in ledger
-         chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1).result.expectSome().expectUint(0);
-
-        // but user 2 still has 1 stack left
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_2).result.expectSome().expectUint(1000000);
-}})
 
 Clarinet.test({
     name: "Ensure that deposit must be valid amount",
@@ -209,3 +183,28 @@ Clarinet.test({
         // ERR INVALID AMOUNT
         block.receipts[0].result.expectErr().expectUint(errorCodes.INVALID_AMOUNT)
 }})
+
+Clarinet.test({
+    name: "Ensure that distribute pnl can only be called during the right time",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+		const wallet_1 = accounts.get('wallet_1')!.address;
+
+        let block = chain.mineBlock([
+            Tx.contractCall("vault", "distribute-pnl", [], wallet_1),
+        ])
+
+        console.log(block.receipts[0])
+
+        // ERR INVALID AMOUNT
+        block.receipts[0].result.expectErr().expectUint(errorCodes.HAS_TO_WAIT_UNTIL_NEXT_BLOCK)
+    }
+})
+
+Clarinet.test({
+    name: "Ensure that we can complete a whole cycle of deposit, inti auction(mint), claim, distribute-pnl",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        // depositors
+		let block = createMintingAuction(chain, accounts)
+
+    }
+})
