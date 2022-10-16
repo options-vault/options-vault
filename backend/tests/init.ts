@@ -290,6 +290,46 @@ export function setEnvironmentForEndCurrentCycle({
     return { block, deployer, packageCV, currentCycleExpiry, signature };
 }
 
+export function createMintingAuction(chain : Chain, accounts: Map<string, Account>)
+  {
+   // depositors
+		const wallet_1 = accounts.get('wallet_1')!.address;
+    const wallet_2 = accounts.get('wallet_2')!.address;
+    // speculators
+    const wallet_3 = accounts.get('wallet_3')!.address;
+    const wallet_4 = accounts.get('wallet_4')!.address;
+    const deployer = accounts.get('deployer')!.address; 
+    let block = createTwoDepositorsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Initialize the first auction; the strike price is in-the-money (below spot)
+		block = initFirstAuction(
+			chain, 
+			deployer,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			testInTheMoneyStrikePriceMultiplier, 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// // Mint two option NFTs
+		// block = initMint(
+		// 	chain, 
+		// 	wallet_3, 
+		// 	wallet_4, 
+		// 	redstoneDataOneMinApart
+		// )
+
+    return block
+  }
+
 
 
 

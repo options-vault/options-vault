@@ -1,8 +1,8 @@
 import { Clarinet, Tx, Chain, Account, types } from 'https://deno.land/x/clarinet@v1.0.2/index.ts';
 import { assert, assertEquals } from 'https://deno.land/std@0.90.0/testing/asserts.ts';
-import { createTwoDepositorsAndProcess, submitPriceData, initFirstAuction, redstoneDataOneMinApart } from "./init.ts"
+import { createTwoDepositorsAndProcess, submitPriceData, initFirstAuction, redstoneDataOneMinApart, CreateAlreadyActiveAndMintingAuction } from "./init.ts"
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
-import { testConfig } from './init.ts';
+import { testConfig, createMintingAuction } from './init.ts';
 
 const errorCodes = {
     INVALID_AMOUNT : 100,
@@ -204,37 +204,7 @@ Clarinet.test({
     name: "Ensure that we can complete a whole cycle of deposit, inti auction(mint), claim, distribute-pnl",
     fn(chain: Chain, accounts: Map<string, Account>) {
         // depositors
-		const wallet_1 = accounts.get('wallet_1')!.address;
-        const wallet_2 = accounts.get('wallet_2')!.address;
-        // speculators
-        const wallet_3 = accounts.get('wallet_3')!.address;
-        const wallet_4 = accounts.get('wallet_4')!.address;
-        const deployer = accounts.get('deployer')!.address;
-
-
-        let block = createTwoDepositorsAndProcess(chain, accounts);
-        console.log(block.receipts)
-        
-
-        block = initFirstAuction(
-			chain, 
-			deployer,
-			testConfig.testAuctionStartTime, 
-			testConfig.testCycleExpiry,  
-			testConfig.testInTheMoneyStrikePriceMultiplier, 
-			redstoneDataOneMinApart
-		);
-
-        // auction should be on
-        block.receipts[0].result.expectOk().expectBool(true)
-
-        console.log(block.receipts)
-        // block.receipts[0].result.expectErr().expectUint(errorCodes.HAS_TO_WAIT_UNTIL_NEXT_BLOCK)
-
-
-        
-
-        // block.receipts[0].result.expectErr().expectUint(errorCodes.HAS_TO_WAIT_UNTIL_NEXT_BLOCK)
+		let block = createMintingAuction(chain, accounts)
 
     }
 })
