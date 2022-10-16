@@ -185,6 +185,7 @@ Clarinet.test({
 }})
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 Clarinet.test({
     name: "Ensure that distribute pnl can only be called during the right time",
     fn(chain: Chain, accounts: Map<string, Account>) {
@@ -210,8 +211,13 @@ Clarinet.test({
     }
 })
 =======
+=======
+>>>>>>> 4e616e526bfa28fc06ef1b37316f67a4e83d8ab6
 
 // Test deposit-premium
 // Test distribute-pnl
 // Test create-settlement-pool
+<<<<<<< HEAD
+>>>>>>> 4e616e526bfa28fc06ef1b37316f67a4e83d8ab6
+=======
 >>>>>>> 4e616e526bfa28fc06ef1b37316f67a4e83d8ab6
