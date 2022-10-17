@@ -250,8 +250,8 @@
         (asserts! 
           (not (is-eq 
             (stx-get-balance CONTRACT_ADDRESS)
-            ;; (at-block (unwrap-panic (get-block-info? id-header-hash (var-get settlement-block-height))) (stx-get-balance CONTRACT_ADDRESS))
-            (- (var-get temp-total-balances) (var-get total-pending-deposits))
+            (at-block (unwrap-panic (get-block-info? id-header-hash (var-get settlement-block-height))) (stx-get-balance CONTRACT_ADDRESS))
+            ;; (- (var-get temp-total-balances) (var-get total-pending-deposits))
           ))
           TX_NOT_APPLIED_YET
         )
@@ -261,7 +261,7 @@
     ;; TODO: Add assert that the function can only called by the options-nft contract
     (var-set temp-total-balances (var-get total-balances))
     (map pnl-evaluator (var-get investor-addresses))
-    (asserts! (is-eq (var-get total-balances) (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits))) PREMIUM_NOT_SPLITTED_CORRECTLY)
+    ;; (asserts! (is-eq (var-get total-balances) (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits))) PREMIUM_NOT_SPLITTED_CORRECTLY)
     (ok true)
   )
 )
