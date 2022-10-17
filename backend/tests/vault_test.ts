@@ -10,14 +10,14 @@ const errorCodes = {
     INSUFFICIENT_FUNDS : 102,
     TX_SENDER_NOT_IN_LEDGER : 103,
     ONLY_CONTRACT_ALLOWED : 104,
-    HAS_TO_WAIT_UNTIL_NEXT_BLOCK : 105,
-    TX_NOT_APPLIED_YET : 106,
-    PREMIUM_NOT_SPLITTED_CORRECTLY : 107,
+    TX_NOT_APPLIED_YET : 105,
+    PREMIUM_NOT_SPLITTED_CORRECTLY : 106,
 }
 
 Clarinet.test({
     name: "Ensure that users can deposit and their funds are processed",
     fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
 		const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
         let block = createTwoDepositorsAndProcess(chain, accounts)
@@ -25,8 +25,9 @@ Clarinet.test({
         block.receipts[0].events.expectSTXTransferEvent(1000000, wallet_1, vaultContract)
         block.receipts[1].events.expectSTXTransferEvent(2000000, wallet_2, vaultContract)
         block.receipts[2].result.expectOk();
-        // TODO check contract balance
-        //console.log(block.receipts[0].events[0])
+
+        // total-balances has to equals to u1000000 or 1 STX
+        chain.callReadOnlyFn('vault', 'get-total-balances', [], deployer).result.expectUint(3000000);
     },
 });
 
@@ -40,7 +41,7 @@ Clarinet.test({
         block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_3),
         ])
-        console.log(block.receipts[0])
+
         // ERR TX_SENDER_NOT_IN_LEDGER
         block.receipts[0].result.expectErr().expectUint(errorCodes.TX_SENDER_NOT_IN_LEDGER)
 }})
@@ -54,8 +55,8 @@ Clarinet.test({
 
         block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
-
         ])
+
         block.receipts[0].result.expectOk()
 }})
 
@@ -88,7 +89,6 @@ Clarinet.test({
         block.receipts[0].result.expectErr().expectUint(errorCodes.INSUFFICIENT_FUNDS)
         block.receipts[1].result.expectOk()
         block.receipts[2].result.expectErr().expectUint(errorCodes.INSUFFICIENT_FUNDS)
-
 }})
 
 Clarinet.test({
@@ -114,40 +114,36 @@ Clarinet.test({
         let block = createTwoDepositorsAndProcess(chain, accounts)
 
         // expect wallet 1 has 1 stack, wallet 2 has 2 in ledger
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1).result.expectSome().expectUint(1000000);
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_2).result.expectSome().expectUint(2000000);
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_1) ], wallet_1).result.expectSome().expectUint(1000000);
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_2) ], wallet_2).result.expectSome().expectUint(2000000);
 
 }})
 
 Clarinet.test({
     name: "Ensure that ledger entry is set correctly during withdrawals",
     fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
 
-        let block = createTwoDepositorsAndProcess(chain, accounts)
+        let block = createTwoDepositorsAndProcess(chain, accounts);
 
         block = chain.mineBlock([
-            Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
-            Tx.contractCall("vault", "process-withdrawals", [], wallet_1),
-
+            Tx.contractCall("vault", "queue-withdrawal", [ types.uint(1000000) ], wallet_1),
+            Tx.contractCall("vault", "process-withdrawals", [], deployer),
         ])
 
-        // TODO make so ledger reads null rather than zero when user has completely withdrawn
-        
-         // user 1 has withdrawn their whole account already, expect they are not in ledger
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1).result.expectNone();
-        // user is actually in ledger with 0 microstacks
-        // chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1).result.expectSome().expectUint(0);
+        // user 1 has withdrawn their whole account already, expect they are not in ledger
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_1) ], wallet_1).result.expectNone();
 
         // but user 2 still has their 2 stacks
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_2).result.expectSome().expectUint(2000000);
-
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_2) ], wallet_2).result.expectSome().expectUint(2000000);
 }})
 
 Clarinet.test({
     name: "Ensure that the two users can queue withdrawal on same block as process withdrawals",
     fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
 
@@ -157,17 +153,18 @@ Clarinet.test({
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
             Tx.contractCall("vault", "process-withdrawals", [], wallet_1),
-
         ])
-        // TODO find out why two queueu withdrawals and then prcess fails, but one works
 
         // TODO find out why result of get-ledger-entry is just a number, not a whole object with pending etc
 
-         // user 1 has withdrawn their whole account already, expect they are not in ledger
-         chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_1).result.expectSome().expectUint(0);
+        // user 1 has withdrawn their whole account already, expect they are not in ledger
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_1) ], wallet_1).result.expectNone();
 
         // but user 2 still has 1 stack left
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [], wallet_2).result.expectSome().expectUint(1000000);
+        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_2) ], wallet_2).result.expectSome().expectUint(1000000);
+
+        // total-balances has to equals to u1000000 or 1 STX
+        chain.callReadOnlyFn('vault', 'get-total-balances', [], deployer).result.expectUint(1000000);
 }})
 
 
@@ -184,21 +181,278 @@ Clarinet.test({
         block.receipts[0].result.expectErr().expectUint(errorCodes.INVALID_AMOUNT)
 }})
 
-<<<<<<< HEAD
-<<<<<<< HEAD
+
 Clarinet.test({
     name: "Ensure that distribute pnl can only be called during the right time",
     fn(chain: Chain, accounts: Map<string, Account>) {
 		const wallet_1 = accounts.get('wallet_1')!.address;
 
         let block = chain.mineBlock([
-            Tx.contractCall("vault", "distribute-pnl", [], wallet_1),
+            Tx.contractCall("vault", "distribute-pnl", [ types.bool(true) ], wallet_1),
         ])
 
-        console.log(block.receipts[0])
+        // console.log(block.receipts[0])
 
-        // ERR INVALID AMOUNT
-        block.receipts[0].result.expectErr().expectUint(errorCodes.HAS_TO_WAIT_UNTIL_NEXT_BLOCK)
+        // ERR TX NOT APPLIED YET
+        block.receipts[0].result.expectErr().expectUint(errorCodes.TX_NOT_APPLIED_YET);
+    }
+})
+
+Clarinet.test({
+    name: "Ensure that distribute pnl can only be called during the right time",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+		const wallet_1 = accounts.get('wallet_1')!.address;
+
+        let block = chain.mineBlock([
+            Tx.contractCall("vault", "distribute-pnl", [ types.bool(true) ], wallet_1),
+        ])
+
+        // console.log(block.receipts[0])
+
+        // ERR TX NOT APPLIED YET
+        block.receipts[0].result.expectErr().expectUint(errorCodes.TX_NOT_APPLIED_YET);
+    }
+})
+
+Clarinet.test({
+    name: "Ensure that distribute-pnl function adds the correct yield to each investor's balance if the pnl is 0",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
+        const wallet_1 = accounts.get('wallet_1')!.address;
+		const wallet_2 = accounts.get('wallet_2')!.address;
+        const wallet_3 = accounts.get('wallet_3')!.address;
+
+        let block = createTwoDepositorsAndProcess(chain, accounts);
+
+        block = chain.mineBlock([
+            Tx.contractCall(
+                'vault',
+                'deposit-premium',
+                [ types.uint(500000), types.principal(wallet_3) ],
+                wallet_3
+            ),
+            Tx.contractCall(
+                'vault',
+                'queue-deposit',
+                [ types.uint(1000000) ],
+                wallet_1
+            ),
+            Tx.contractCall(
+                'vault',
+                'process-deposits',
+                [],
+                deployer
+            ),
+            Tx.contractCall(
+                "vault", 
+                "distribute-pnl",
+                [ types.bool(false) ], 
+                deployer
+            )
+        ])
+   
+        chain.callReadOnlyFn(
+            "vault", 
+            "get-ledger-entry", 
+            [ types.principal(wallet_1) ], 
+            wallet_1
+        ).result.expectSome().expectUint(2250000);
+
+        chain.callReadOnlyFn(
+            "vault", 
+            "get-ledger-entry", 
+            [ types.principal(wallet_2) ], 
+            wallet_2
+        ).result.expectSome().expectUint(2250000);
+        
+        console.log(chain.callReadOnlyFn(
+            "vault", 
+            "get-total-balances", 
+            [], 
+            deployer
+        ))
+    }
+})
+
+Clarinet.test({
+    name: "Ensure that distribute-pnl function substracts the correct amount to each investor's balance if there is pnl",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
+        const wallet_1 = accounts.get('wallet_1')!.address;
+		const wallet_2 = accounts.get('wallet_2')!.address;
+        const wallet_3 = accounts.get('wallet_3')!.address;
+        // const wallet_4 = accounts.get('wallet_4')!.address;
+        const vault = `${deployer}.vault`;
+        const optionsNft = `${deployer}.options-nft`;
+
+        let block = createTwoDepositorsAndProcess(chain, accounts);
+
+        block = chain.mineBlock([
+            Tx.contractCall(
+                'vault',
+                'deposit-premium',
+                [ types.uint(500000), types.principal(wallet_3) ],
+                wallet_3
+            ),
+            Tx.contractCall(
+                'vault',
+                'queue-deposit',
+                [ types.uint(1000000) ],
+                wallet_1
+            ),
+            Tx.contractCall(
+                'vault',
+                'process-deposits',
+                [],
+                deployer
+            ),
+            Tx.contractCall(
+                'vault',
+                'create-settlement-pool',
+                [ types.uint(500000), types.principal(optionsNft)],
+                deployer
+            )
+        ])
+
+        // checks if the create-settlement-pool works
+        block.receipts[3].events.expectSTXTransferEvent(500000, vault, optionsNft);
+
+        block = chain.mineBlock([
+            Tx.contractCall(
+                "vault", 
+                "distribute-pnl",
+                [ types.bool(false) ], 
+                deployer
+            )
+        ])
+        console.log(block)
+        chain.callReadOnlyFn(
+            "vault", 
+            "get-ledger-entry", 
+            [ types.principal(wallet_1) ], 
+            wallet_1
+        ).result.expectSome().expectUint(1750000);
+
+        chain.callReadOnlyFn(
+            "vault", 
+            "get-ledger-entry", 
+            [ types.principal(wallet_2) ], 
+            wallet_2
+        ).result.expectSome().expectUint(1750000);
+        
+        console.log(chain.callReadOnlyFn(
+            "vault", 
+            "get-total-balances", 
+            [], 
+            deployer
+        ))
+    }
+})
+
+Clarinet.test({
+    name: "Ensure that create-settlement-pool function transfers an amount form vault to options-nft contract",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
+        const vault = `${deployer}.vault`;
+        const optionsNft = `${deployer}.options-nft`;
+
+		let block = createTwoDepositorsAndProcess(chain, accounts);
+
+        block = chain.mineBlock([
+            Tx.contractCall(
+                'vault',
+                'create-settlement-pool',
+                [ types.uint(500000), types.principal(optionsNft)],
+                deployer
+            )
+        ])
+
+        // checks if the create-settlement-pool works
+        block.receipts[0].events.expectSTXTransferEvent(500000, vault, optionsNft);
+    }
+})
+
+Clarinet.test({
+    name: "Ensure to withdraw just the balance amount if there is less than the pending withdrawal amount after distributing pnl",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
+        const wallet_1 = accounts.get('wallet_1')!.address;
+		const wallet_2 = accounts.get('wallet_2')!.address;
+        const wallet_3 = accounts.get('wallet_3')!.address;
+        // const wallet_4 = accounts.get('wallet_4')!.address;
+        const vault = `${deployer}.vault`;
+        const optionsNft = `${deployer}.options-nft`;
+
+        let block = createTwoDepositorsAndProcess(chain, accounts);
+
+        block = chain.mineBlock([
+            Tx.contractCall(
+                'vault',
+                'deposit-premium',
+                [ types.uint(500000), types.principal(wallet_3) ],
+                wallet_3
+            ),
+            Tx.contractCall(
+                'vault',
+                'queue-deposit',
+                [ types.uint(1000000) ],
+                wallet_1
+            ),
+            Tx.contractCall(
+                'vault',
+                'process-deposits',
+                [],
+                deployer
+            ),
+            Tx.contractCall(
+                'vault',
+                'create-settlement-pool',
+                [ types.uint(500000), types.principal(optionsNft)],
+                deployer
+            )
+        ])
+
+        block = chain.mineBlock([
+            Tx.contractCall(
+                'vault',
+                'queue-withdrawal',
+                [ types.uint(2000000) ],
+                wallet_1
+            ),
+            Tx.contractCall(
+                "vault", 
+                "distribute-pnl",
+                [ types.bool(false) ], 
+                deployer
+            ),
+            Tx.contractCall(
+                "vault", 
+                "process-withdrawals",
+                [ types.bool(false) ], 
+                deployer
+            )
+        ])
+        
+        chain.callReadOnlyFn(
+            "vault", 
+            "get-ledger-entry", 
+            [ types.principal(wallet_1) ], 
+            wallet_1
+        ).result.expectNone();
+
+        chain.callReadOnlyFn(
+            "vault", 
+            "get-ledger-entry", 
+            [ types.principal(wallet_2) ], 
+            wallet_2
+        ).result.expectSome().expectUint(1750000);
+        
+        console.log(chain.callReadOnlyFn(
+            "vault", 
+            "get-total-balances", 
+            [], 
+            deployer
+        ))//.result.expectSome().expectUint(1750000);
     }
 })
 
@@ -210,14 +464,7 @@ Clarinet.test({
 
     }
 })
-=======
-=======
->>>>>>> 4e616e526bfa28fc06ef1b37316f67a4e83d8ab6
 
 // Test deposit-premium
 // Test distribute-pnl
 // Test create-settlement-pool
-<<<<<<< HEAD
->>>>>>> 4e616e526bfa28fc06ef1b37316f67a4e83d8ab6
-=======
->>>>>>> 4e616e526bfa28fc06ef1b37316f67a4e83d8ab6

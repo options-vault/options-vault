@@ -9,9 +9,8 @@
 (define-constant INSUFFICIENT_FUNDS (err u102))
 (define-constant TX_SENDER_NOT_IN_LEDGER (err u103))
 (define-constant ONLY_CONTRACT_ALLOWED (err u104))
-(define-constant HAS_TO_WAIT_UNTIL_NEXT_BLOCK (err u105))
-(define-constant TX_NOT_APPLIED_YET (err u106))
-(define-constant PREMIUM_NOT_SPLITTED_CORRECTLY (err u107))
+(define-constant TX_NOT_APPLIED_YET (err u105))
+(define-constant PREMIUM_NOT_SPLITTED_CORRECTLY (err u106))
 
 ;; data maps and vars
 
@@ -32,18 +31,18 @@
 ;; Functions that checks what is the user's balance/pending-withdrawal/pending-deposit in the vault
 
 ;; Balance helper functions
-(define-read-only (get-ledger-entry)
-  (get balance (map-get? ledger tx-sender))
+(define-read-only (get-ledger-entry (investor principal))
+  (get balance (map-get? ledger investor))
 )
 
-(define-private (add-to-balance (amount uint)) 
-  (+ (default-to u0 (get-ledger-entry)) amount)
+(define-private (add-to-balance (amount uint) (investor principal)) 
+  (+ (default-to u0 (get-ledger-entry investor)) amount)
 )
 
-(define-private (substract-to-balance (amount uint)) 
-  (- (default-to u0 (get-ledger-entry)) amount)
+(define-private (substract-to-balance (amount uint) (investor principal)) 
+  (- (default-to u0 (get-ledger-entry investor)) amount)
 )
-
+;; TODO: Check if there is neccesary to add investor as parameter for each helper function
 ;; Deposit helper functions
 (define-read-only (get-pending-deposit) 
   (default-to u0 (get pending-deposits (map-get? ledger tx-sender)))
@@ -182,36 +181,34 @@
           (investor-balance (get balance investor-info))
           (investor-pending-withdrawal (get pending-withdrawal investor-info))
           (investor-address (get address investor-info))
+          (investor-withdrawal-allowed (if (> investor-pending-withdrawal investor-balance) investor-balance investor-pending-withdrawal))
         )
-        (if (and 
-              (>= investor-balance investor-pending-withdrawal)
-              (> investor-pending-withdrawal u0)
-            )
+        (if (> investor-pending-withdrawal u0)
             ;; if investor's balance is equal or greater than its pending-withdrawal amount
             ;; and investor's pending-withdrawal amount is greater than 0
             (begin
-              (try! (as-contract (stx-transfer? investor-pending-withdrawal tx-sender investor-address)))
-              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
+              (try! (as-contract (stx-transfer? investor-withdrawal-allowed tx-sender investor-address)))
+              (var-set total-balances (- (var-get total-balances) investor-withdrawal-allowed))
               (map-set ledger
                 investor
                 (merge
                   investor-info
                   {
                     balance: 
-                      (substract-to-balance investor-pending-withdrawal),
+                      (substract-to-balance investor-withdrawal-allowed investor),
                     pending-withdrawal:
                       u0
                   }  
                 )
               )
-              (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
+              ;; (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
               (if 
                 (is-eq (get balance (unwrap-panic (map-get? ledger investor))) u0)
                 (map-delete ledger investor)
                 true
               )
             )
-            ;; if false just pass
+            ;; if false, tranfers what is in the balance to the investor and delete the investor from the ledger and the investor's list
             true
         )
         (ok true)
@@ -222,7 +219,7 @@
 ;;                     which will be executed at the end of the current cycle
 (define-public (queue-withdrawal (amount uint)) 
   (let  (
-          (investor-balance (unwrap! (get-ledger-entry) TX_SENDER_NOT_IN_LEDGER))
+          (investor-balance (unwrap! (get-ledger-entry tx-sender) TX_SENDER_NOT_IN_LEDGER))
           (investor-pending-withdrawal (get-pending-withdrawal))
           (investor-info (unwrap-panic (map-get? ledger tx-sender)))
         )
@@ -253,8 +250,8 @@
         (asserts! 
           (not (is-eq 
             (stx-get-balance CONTRACT_ADDRESS)
-            ;; (at-block (unwrap-panic (get-block-info? id-header-hash (var-get settlement-block-height))) (stx-get-balance CONTRACT_ADDRESS))
-            (- (var-get temp-total-balances) (var-get total-pending-deposits))
+            (at-block (unwrap-panic (get-block-info? id-header-hash (var-get settlement-block-height))) (stx-get-balance CONTRACT_ADDRESS))
+            ;; (- (var-get temp-total-balances) (var-get total-pending-deposits))
           ))
           TX_NOT_APPLIED_YET
         )
@@ -264,7 +261,7 @@
     ;; TODO: Add assert that the function can only called by the options-nft contract
     (var-set temp-total-balances (var-get total-balances))
     (map pnl-evaluator (var-get investor-addresses))
-    (asserts! (is-eq (var-get total-balances) (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits))) PREMIUM_NOT_SPLITTED_CORRECTLY)
+    ;; (asserts! (is-eq (var-get total-balances) (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits))) PREMIUM_NOT_SPLITTED_CORRECTLY)
     (ok true)
   )
 )
