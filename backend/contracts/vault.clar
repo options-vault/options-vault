@@ -4,13 +4,13 @@
 ;; constants
 (define-constant CONTRACT_ADDRESS (as-contract tx-sender))
 
-(define-constant INVALID_AMOUNT (err u100))
-(define-constant VAULT_NOT_ALLOWED (err u101))
-(define-constant INSUFFICIENT_FUNDS (err u102))
-(define-constant TX_SENDER_NOT_IN_LEDGER (err u103))
-(define-constant ONLY_CONTRACT_ALLOWED (err u104))
-(define-constant TX_NOT_APPLIED_YET (err u105))
-(define-constant PREMIUM_NOT_SPLITTED_CORRECTLY (err u106))
+(define-constant ERR_INVALID_AMOUNT (err u100))
+(define-constant ERR_VAULT_NOT_ALLOWED (err u101))
+(define-constant ERR_INSUFFICIENT_FUNDS (err u102))
+(define-constant ERR_TX_SENDER_NOT_IN_LEDGER (err u103))
+(define-constant ERR_ONLY_CONTRACT_ALLOWED (err u104))
+(define-constant ERR_TX_NOT_APPLIED_YET (err u105))
+(define-constant ERR_PREMIUM_NOT_SPLITTED_CORRECTLY (err u106))
 
 ;; data maps and vars
 
@@ -113,8 +113,8 @@
 ;; <deposit-premium>: Transfers the premium that comes from an user2 type when buys an option NFT
 (define-public (deposit-premium (amount uint) (original-sender principal)) 
   (begin
-    (asserts! (> amount u0) INVALID_AMOUNT)
-    (asserts! (not (is-eq original-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
+    (asserts! (> amount u0) ERR_INVALID_AMOUNT)
+    (asserts! (not (is-eq original-sender CONTRACT_ADDRESS)) ERR_VAULT_NOT_ALLOWED)
     (try! (stx-transfer? amount original-sender CONTRACT_ADDRESS))
     (ok true)
   )
@@ -125,8 +125,8 @@
 ;;                  Also adds the investor address in investor-address list, if it is a new one, and increments total-pending-deposits by the amount deposited
 (define-public (queue-deposit (amount uint)) 
   (begin
-    (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) VAULT_NOT_ALLOWED)
-    (asserts! (> amount u0) INVALID_AMOUNT)
+    (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) ERR_VAULT_NOT_ALLOWED)
+    (asserts! (> amount u0) ERR_INVALID_AMOUNT)
     (try! (stx-transfer? amount tx-sender CONTRACT_ADDRESS))
     (if (map-insert ledger 
           tx-sender
@@ -219,11 +219,11 @@
 ;;                     which will be executed at the end of the current cycle
 (define-public (queue-withdrawal (amount uint)) 
   (let  (
-          (investor-balance (unwrap! (get-ledger-entry tx-sender) TX_SENDER_NOT_IN_LEDGER))
+          (investor-balance (unwrap! (get-ledger-entry tx-sender) ERR_TX_SENDER_NOT_IN_LEDGER))
           (investor-pending-withdrawal (get-pending-withdrawal))
           (investor-info (unwrap-panic (map-get? ledger tx-sender)))
         )
-        (asserts! (>= investor-balance (+ investor-pending-withdrawal amount)) INSUFFICIENT_FUNDS)
+        (asserts! (>= investor-balance (+ investor-pending-withdrawal amount)) ERR_INSUFFICIENT_FUNDS)
         (map-set ledger  
           tx-sender
           (merge 
@@ -253,7 +253,7 @@
             (at-block (unwrap-panic (get-block-info? id-header-hash (var-get settlement-block-height))) (stx-get-balance CONTRACT_ADDRESS))
             ;; (- (var-get temp-total-balances) (var-get total-pending-deposits))
           ))
-          TX_NOT_APPLIED_YET
+          ERR_TX_NOT_APPLIED_YET
         )
       )
       true
@@ -304,11 +304,9 @@
 ;; #[allow(unchecked_data)]
 (define-public (create-settlement-pool (amount uint) (settlement-contract principal))
   (begin
-    (asserts! (> amount u0) INVALID_AMOUNT)
+    (asserts! (> amount u0) ERR_INVALID_AMOUNT)
     (var-set settlement-block-height block-height)
     (try! (as-contract (stx-transfer? amount tx-sender settlement-contract)))
     (ok true)
   )
 )
-
-;; vault-balance = total-balances + premiums + total-pending-deposits

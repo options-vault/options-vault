@@ -1,6 +1,6 @@
 import { Clarinet, Tx, Chain, Account, types } from 'https://deno.land/x/clarinet@v1.0.2/index.ts';
 import { assert, assertEquals } from 'https://deno.land/std@0.90.0/testing/asserts.ts';
-import { createTwoDepositorsAndProcess, submitPriceData, initFirstAuction, redstoneDataOneMinApart, CreateAlreadyActiveAndMintingAuction } from "./init.ts"
+import { createTwoDepositorsAndProcess, submitPriceData, initFirstAuction, redstoneDataOneMinApart } from "./init.ts"
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
 import { testConfig, createMintingAuction } from './init.ts';
 
@@ -454,16 +454,31 @@ Clarinet.test({
             deployer
         ))//.result.expectSome().expectUint(1750000);
     }
-})
+});
 
 Clarinet.test({
-    name: "Ensure that we can complete a whole cycle of deposit, inti auction(mint), claim, distribute-pnl",
+    name: "Ensure that create-settlement-pool function only accepts valid amouunts",
     fn(chain: Chain, accounts: Map<string, Account>) {
-        // depositors
-		let block = createMintingAuction(chain, accounts)
+        const deployer = accounts.get('deployer')!.address;
+        const vault = `${deployer}.vault`;
+        const optionsNft = `${deployer}.options-nft`;
 
+		let block = createTwoDepositorsAndProcess(chain, accounts);
+
+        block = chain.mineBlock([
+            Tx.contractCall(
+                'vault',
+                'create-settlement-pool',
+                [ types.uint(0), types.principal(optionsNft)],
+                deployer
+            )
+        ])
+
+        // checks if the create-settlement-pool works
+        block.receipts[0].result.expectErr().expectUint(errorCodes.INVALID_AMOUNT)
     }
-})
+});
+
 
 // Test deposit-premium
 // Test distribute-pnl
