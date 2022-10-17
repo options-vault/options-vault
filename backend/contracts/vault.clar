@@ -107,6 +107,7 @@
           )
         )
         (var-set total-balances (+ (var-get total-balances) investor-pending-deposit))
+        (var-set total-pending-deposits (- (var-get total-pending-deposits) investor-pending-deposit))
   )
 )
 
@@ -296,9 +297,22 @@
   (var-get total-balances)
 )
 
+(define-read-only (get-temp-total-balances) 
+  (var-get temp-total-balances)
+)
+
 (define-read-only (get-investors-list) 
   (var-get investor-addresses)
 )
+
+(define-read-only (get-contract-balance) 
+  (stx-get-balance CONTRACT_ADDRESS)
+)
+
+(define-read-only (get-pending-deposits) 
+  (var-get total-pending-deposits)
+)
+
 
 ;; TX to settlement contract what is owed to users2 type
 ;; #[allow(unchecked_data)]

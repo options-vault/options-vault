@@ -265,23 +265,22 @@ Clarinet.test({
             wallet_2
         ).result.expectSome().expectUint(2250000);
         
-        console.log(chain.callReadOnlyFn(
+        chain.callReadOnlyFn(
             "vault", 
             "get-total-balances", 
             [], 
             deployer
-        ))
+        ).result.expectUint(4500000);
     }
 })
 
 Clarinet.test({
-    name: "Ensure that distribute-pnl function substracts the correct amount to each investor's balance if there is pnl",
+    name: "Ensure that distribute-pnl function adds the correct amount to each investor's balance if there is pnl for case 2 (user 1 and 2 receive yield)",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
         const wallet_3 = accounts.get('wallet_3')!.address;
-        // const wallet_4 = accounts.get('wallet_4')!.address;
         const vault = `${deployer}.vault`;
         const optionsNft = `${deployer}.options-nft`;
 
@@ -309,13 +308,13 @@ Clarinet.test({
             Tx.contractCall(
                 'vault',
                 'create-settlement-pool',
-                [ types.uint(500000), types.principal(optionsNft)],
+                [ types.uint(300000), types.principal(optionsNft)],
                 deployer
             )
         ])
 
         // checks if the create-settlement-pool works
-        block.receipts[3].events.expectSTXTransferEvent(500000, vault, optionsNft);
+        block.receipts[3].events.expectSTXTransferEvent(300000, vault, optionsNft);
 
         block = chain.mineBlock([
             Tx.contractCall(
@@ -325,27 +324,101 @@ Clarinet.test({
                 deployer
             )
         ])
-        console.log(block)
+
         chain.callReadOnlyFn(
             "vault", 
             "get-ledger-entry", 
             [ types.principal(wallet_1) ], 
             wallet_1
-        ).result.expectSome().expectUint(1750000);
+        ).result.expectSome().expectUint(2100000);
 
         chain.callReadOnlyFn(
             "vault", 
             "get-ledger-entry", 
             [ types.principal(wallet_2) ], 
             wallet_2
-        ).result.expectSome().expectUint(1750000);
+        ).result.expectSome().expectUint(2100000);
         
-        console.log(chain.callReadOnlyFn(
+        chain.callReadOnlyFn(
             "vault", 
             "get-total-balances", 
             [], 
             deployer
-        ))
+        ).result.expectUint(4200000);
+    }
+})
+
+Clarinet.test({
+    name: "Ensure that distribute-pnl function substracts the correct amount to each investor's balance if there is pnl for case 3 (user 1 losses and user 2 receives yield)",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
+        const wallet_1 = accounts.get('wallet_1')!.address;
+		const wallet_2 = accounts.get('wallet_2')!.address;
+        const wallet_3 = accounts.get('wallet_3')!.address;
+        const vault = `${deployer}.vault`;
+        const optionsNft = `${deployer}.options-nft`;
+
+        let block = createTwoDepositorsAndProcess(chain, accounts);
+
+        block = chain.mineBlock([
+            Tx.contractCall(
+                'vault',
+                'deposit-premium',
+                [ types.uint(500000), types.principal(wallet_3) ],
+                wallet_3
+            ),
+            Tx.contractCall(
+                'vault',
+                'queue-deposit',
+                [ types.uint(1000000) ],
+                wallet_1
+            ),
+            Tx.contractCall(
+                'vault',
+                'process-deposits',
+                [],
+                deployer
+            ),
+            Tx.contractCall(
+                'vault',
+                'create-settlement-pool',
+                [ types.uint(700000), types.principal(optionsNft)],
+                deployer
+            )
+        ])
+
+        // checks if the create-settlement-pool works
+        block.receipts[3].events.expectSTXTransferEvent(700000, vault, optionsNft);
+
+        block = chain.mineBlock([
+            Tx.contractCall(
+                "vault", 
+                "distribute-pnl",
+                [ types.bool(false) ], 
+                deployer
+            )
+        ])
+
+        chain.callReadOnlyFn(
+            "vault", 
+            "get-ledger-entry", 
+            [ types.principal(wallet_1) ], 
+            wallet_1
+        ).result.expectSome().expectUint(1900000);
+
+        chain.callReadOnlyFn(
+            "vault", 
+            "get-ledger-entry", 
+            [ types.principal(wallet_2) ], 
+            wallet_2
+        ).result.expectSome().expectUint(1900000);
+        
+        chain.callReadOnlyFn(
+            "vault", 
+            "get-total-balances", 
+            [], 
+            deployer
+        ).result.expectUint(3800000);
     }
 })
 
@@ -407,7 +480,7 @@ Clarinet.test({
             Tx.contractCall(
                 'vault',
                 'create-settlement-pool',
-                [ types.uint(500000), types.principal(optionsNft)],
+                [ types.uint(700000), types.principal(optionsNft)],
                 deployer
             )
         ])
@@ -428,7 +501,7 @@ Clarinet.test({
             Tx.contractCall(
                 "vault", 
                 "process-withdrawals",
-                [ types.bool(false) ], 
+                [], 
                 deployer
             )
         ])
@@ -445,14 +518,14 @@ Clarinet.test({
             "get-ledger-entry", 
             [ types.principal(wallet_2) ], 
             wallet_2
-        ).result.expectSome().expectUint(1750000);
+        ).result.expectSome().expectUint(1900000);
         
-        console.log(chain.callReadOnlyFn(
+        chain.callReadOnlyFn(
             "vault", 
             "get-total-balances", 
             [], 
             deployer
-        ))//.result.expectSome().expectUint(1750000);
+        ).result.expectUint(1900000);
     }
 });
 
