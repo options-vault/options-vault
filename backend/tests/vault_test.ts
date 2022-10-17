@@ -373,6 +373,90 @@ Clarinet.test({
 })
 
 Clarinet.test({
+    name: "Ensure to withdraw just the balance amount if there is less than the pending withdrawal amount after distributing pnl",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
+        const wallet_1 = accounts.get('wallet_1')!.address;
+		const wallet_2 = accounts.get('wallet_2')!.address;
+        const wallet_3 = accounts.get('wallet_3')!.address;
+        // const wallet_4 = accounts.get('wallet_4')!.address;
+        const vault = `${deployer}.vault`;
+        const optionsNft = `${deployer}.options-nft`;
+
+        let block = createTwoDepositorsAndProcess(chain, accounts);
+
+        block = chain.mineBlock([
+            Tx.contractCall(
+                'vault',
+                'deposit-premium',
+                [ types.uint(500000), types.principal(wallet_3) ],
+                wallet_3
+            ),
+            Tx.contractCall(
+                'vault',
+                'queue-deposit',
+                [ types.uint(1000000) ],
+                wallet_1
+            ),
+            Tx.contractCall(
+                'vault',
+                'process-deposits',
+                [],
+                deployer
+            ),
+            Tx.contractCall(
+                'vault',
+                'create-settlement-pool',
+                [ types.uint(500000), types.principal(optionsNft)],
+                deployer
+            )
+        ])
+
+        block = chain.mineBlock([
+            Tx.contractCall(
+                'vault',
+                'queue-withdrawal',
+                [ types.uint(2000000) ],
+                wallet_1
+            ),
+            Tx.contractCall(
+                "vault", 
+                "distribute-pnl",
+                [ types.bool(false) ], 
+                deployer
+            ),
+            Tx.contractCall(
+                "vault", 
+                "process-withdrawals",
+                [ types.bool(false) ], 
+                deployer
+            )
+        ])
+        
+        chain.callReadOnlyFn(
+            "vault", 
+            "get-ledger-entry", 
+            [ types.principal(wallet_1) ], 
+            wallet_1
+        ).result.expectNone();
+
+        chain.callReadOnlyFn(
+            "vault", 
+            "get-ledger-entry", 
+            [ types.principal(wallet_2) ], 
+            wallet_2
+        ).result.expectSome().expectUint(1750000);
+        
+        console.log(chain.callReadOnlyFn(
+            "vault", 
+            "get-total-balances", 
+            [], 
+            deployer
+        ))//.result.expectSome().expectUint(1750000);
+    }
+})
+
+Clarinet.test({
     name: "Ensure that we can complete a whole cycle of deposit, inti auction(mint), claim, distribute-pnl",
     fn(chain: Chain, accounts: Map<string, Account>) {
         // depositors
