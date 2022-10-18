@@ -101,9 +101,9 @@
 
 		(if (and
 			current-cycle-expired
-			(not (var-get settlement-tx-in-mempool))
+			(not (var-get settlement-tx-in-mempool)) ; TODO rename to settlement-broadcast-block-height
 			)
-				(try! (end-current-cycle))
+				(try! (end-current-cycle)) ;; TODO: Should end-current-cyle and determine-value-and-settle be consolidated into one function?
 				true
 		)
 
@@ -111,7 +111,7 @@
 			current-cycle-expired 
 			(> block-height (var-get settlement-block-height)) ;; TODO rename to settlement-tx-broadcast-block-height
 			) 
-				(begin
+				(begin ;; TODO abstract all vault contract-calls into a helper function called update-vault-ledger
 					(try! (contract-call? .vault distribute-pnl (var-get settlement-tx-in-mempool)))
 					(unwrap! (contract-call? .vault process-deposits) ERR_PROCESS_DEPOSITS)
 					(unwrap! (contract-call? .vault process-withdrawals) ERR_PROCESS_WITHDRAWALS)
@@ -155,8 +155,8 @@
 	(let 
 		(
 			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD))
-			(strike (calculate-strike stxusd-rate)) ;; simplified calculation for mvp scope
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-milliseconds))
+			(strike (calculate-strike stxusd-rate)) ;; simplified calculation for mvp scope
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
 			(normal-start-time (+ (var-get current-cycle-expiry) (* u120 min-in-milliseconds)))
 			(now (var-get last-seen-timestamp))
@@ -179,9 +179,9 @@
 			(var-set auction-start-time now)
 		)
 		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
-		(var-set current-cycle-expiry next-cycle-expiry)
 		(var-set options-for-sale (/ (contract-call? .vault get-total-balances) stacks-base))
 		(var-set settlement-tx-in-mempool false)
+		(var-set current-cycle-expiry next-cycle-expiry)
 		(ok true) 
 	)
 )
@@ -191,6 +191,7 @@
   (var-set options-ledger-list (unwrap-panic (as-max-len? (append (var-get options-ledger-list) cycle-tuple) u1000)))
 )
 
+;; TODO: Split determine-value and settle into two seperate functions
 (define-private (determine-value-and-settle)
 	(let
 		(
@@ -244,9 +245,9 @@
 
 (define-private (calculate-strike (stxusd-rate uint))
 	;; A simple calculation to set the strike price 15% higher than the current price of the underlying asset
-	;; In the next iteration we intend to replace this simplified calculation with a calculation that thanks more variables (i.e. volatility) into account
+	;; In the next iteration we intend to replace this simplified calculation with a calculation that takes more variables (i.e. volatility) into account
 	;; Since the begin of the auction is somewhat variable (there is a small chance that it starts later than normal-start-time) it would help risk-management
-	;; to make the calculate-strike and/or the set-optons-price functions dependent on the time-to-expiry, therefore properly pricing the option's time value
+	;; to make the calculate-strike and/or the set-optons-price functions dependent on the time-to-expiry, which would allow to more accurately price the option's time value.
 	(/ (* stxusd-rate u115) u100)
 )
 ;; NFT MINTING (Priced in USD, payed in STX)
@@ -286,7 +287,9 @@
 		(ok token-id)
 	)
 )
-
+;; TODO IMPORTANT: Add logic that makes it so the price gets only decremented once every 30 min
+;; The logic needs to check if the decrement has already been applied, this can be achieved by introducing
+;; a global auction-decrement-counter variable that increases every time a decrement is applied and is set to zero by init-next-cycle
 (define-private (update-options-price-in-usd (timestamp uint)) 
 	(let
 		(
@@ -321,6 +324,8 @@
 		;; A (some value) indicates that set-and-determine-value has 
 		;; calculated a pnl after the contract has expired.
 
+		;; TODO: Replace with an if statement that checks if the option-pnl is above zero.
+		;; The current implementation leads to a runtime error for OTM options
 		(match option-pnl
 			payout
 			(begin
