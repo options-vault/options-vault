@@ -20,7 +20,7 @@
 
 (define-data-var total-pending-deposits uint u0)
 
-(define-data-var settlement-block-height uint u0)
+(define-data-var settlement-broadcast-block-height uint u0)
 
 ;; Balance helper functions
 (define-read-only (get-ledger-entry (investor principal))
@@ -243,7 +243,7 @@
         (asserts! 
           (not (is-eq 
             (stx-get-balance CONTRACT_ADDRESS)
-            (at-block (unwrap-panic (get-block-info? id-header-hash (var-get settlement-block-height))) (stx-get-balance CONTRACT_ADDRESS))
+            (at-block (unwrap-panic (get-block-info? id-header-hash (var-get settlement-broadcast-block-height))) (stx-get-balance CONTRACT_ADDRESS))
             ;; (- (var-get temp-total-balances) (var-get total-pending-deposits))
           ))
           ERR_TX_NOT_APPLIED_YET
@@ -312,7 +312,7 @@
 (define-public (create-settlement-pool (amount uint) (settlement-contract principal))
   (begin
     (asserts! (> amount u0) ERR_INVALID_AMOUNT)
-    (var-set settlement-block-height block-height)
+    (var-set settlement-broadcast-block-height block-height)
     (try! (as-contract (stx-transfer? amount tx-sender settlement-contract)))
     (ok true)
   )
