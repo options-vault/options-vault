@@ -158,20 +158,21 @@ The claim function allows user 2 to send in an option NFT and claim the STX equi
 
 ### vault functions
 
-**`queue-deposit`**
+**:star2: _`queue-deposit`_**
 
-**`process-deposit`**
 
-**`queue-withdrawal`**
 
-**`process-withdrawal`**
+**:star2: _`process-deposit`_**
 
-**`create-settlement-pool`**
+**:star2: _`queue-withdrawal`_**
 
-**`deposit-premium`**
+**:star2: _`process-withdrawal`_**
 
-**`distribute-pnl`**
+**:star2: _`create-settlement-pool`_**
 
+**:star2: _`deposit-premium`_**
+
+**:star2: _`distribute-pnl`_**
 
 ### helper functions
 
