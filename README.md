@@ -75,7 +75,7 @@ In order to offer options contract with calendar expiry dates (instead of block 
 
 ### Cycles
 
-![Cycle Overview](https://github.com/options-vault/options-vault/blob/dev/assets/cycle-overview-2.png)
+![Cycle Overview](https://github.com/options-vault/options-vault/blob/dev/assets/cycle-overview-3.png)
 
 The whole app revolves around a one week cycle. The variable `current-cycle-expiry`, which holds the UNIX timestamp of the current cycle's epxiry. This variable acts as the contract's internal clock. 
 
