@@ -23,8 +23,6 @@ We believe that by automating the execution using Clarity smart contracts we can
 
 Stacks is in a unique position to become the smart contracting layer for Bitcoin and by extension the home of Bitcoin DeFi. In making sustainable yield strategies available on Stacks we believe that we can help unlock the ecosystem's potential and contribute to accelerated user adoption.
 
-[TODO: Link to video presentation]
-
 ## How does it work? - A first high level overview
 
 ![App Overview](https://github.com/options-vault/options-vault/blob/dev/assets/options-vault-overview-wide.png)
@@ -77,7 +75,7 @@ In order to offer options contract with calendar expiry dates (instead of block 
 
 ### Cycles
 
-![Cycle Overview](https://github.com/options-vault/options-vault/blob/dev/assets/cycle-overview-2.png)
+![Cycle Overview](https://github.com/options-vault/options-vault/blob/dev/assets/cycle-overview-3.png)
 
 The whole app revolves around a one week cycle. The variable `current-cycle-expiry`, which holds the UNIX timestamp of the current cycle's epxiry. This variable acts as the contract's internal clock. 
 
@@ -100,7 +98,7 @@ Independently from the value of the options NFT, the balances of the vault's int
 **III. Ledger updates and payement processing**\
 Intra-week deposits and withdrawals are kept seperate from the vault `balance` and are tracked in the `pending-deposits` and `pending-withdrawal` ledger entries. Once the settlement process has been completed, the vault contract processes both deposits and withdrawals and sends the corresponding on-chain transactions. Note that deposits are processed on-chain immediately when requested by the user, while Withdrawals are only sent in bulk at the end of every cycle.
 
-### Function descriptions options-nft contract
+### Detailed description of the functions in the `options-nft` contract
 
 **:star2: _`submit-price-data`_**
 
@@ -156,26 +154,36 @@ The function decrements the `options-price-in-usd` by 2% every 30 minutes.
 
 The claim function allows user 2 to send in an option NFT and claim the STX equivalent of the `option-pnl` at expiry.  The function receives pricing data from a Redstone oracle and verifies that it was signed by a trusted public key. It additionally receives the `token-id` of the option NFT that is to be claimed. Via the `find-expiry` method the function determines the expiry-date of the NFT by traversing the `options-ledger-list` looking for the `cycle-tuple` entry that corresponds to the `token-id`. If `option-pnl` is above zero the contract sends a STX transfer to the NFT holder.
 
-### vault functions
+### Detailed description of the functions in the `vault` contract
 
 **:star2: _`queue-deposit`_**
 
+The function transfers the deposited STX amount to the vault contract and adds the amount to the `pending-deposits` property of the investor's entry in the vault `ledger`. If it is the first deposit for the investor, the function adds the investor's address (principal) to the`investor-addresses` list.
 
+**:star2: _`process-deposits`_**
 
-**:star2: _`process-deposit`_**
+The function iterates over the `investor-addresses` list and applies the `pending-deposits` amount to the investor's ledger `balance`.
 
 **:star2: _`queue-withdrawal`_**
 
-**:star2: _`process-withdrawal`_**
+The function adds the requested withdrawal amount to the `pending-withdrawal` property of the investor's entry in the vault `ledger`. The function does not send an on-chain transaction but only queues the withdrawal to be processed at the end of the cycle with `process-withdrawal`.
+
+**:star2: _`process-withdrawals`_**
+
+The function iterates over the `investor-addresses` list and applies the `pending-withdrawal` amount to the investor's ledger `balance`. If the investor has the necessary balance available the function processes the withdrawal by sending an on-chain STX transfer for the requested amount.
 
 **:star2: _`create-settlement-pool`_**
 
+The function transfers the STX amount owed to the cycle's NFT holders to the `options-nft` contract, effectively creating a settlement-pool. It is called by the `options-nft` contract as part of the logic for `determine-value-and-settle` and only executes in case of an in-the-money options NFT.
+
 **:star2: _`deposit-premium`_**
+
+The function transfers the STX amount paid by user 2 for minting an options NFT (the premium) to the vault contract.
 
 **:star2: _`distribute-pnl`_**
 
-### helper functions
+The function distributes the cycle's profit and loss (pnl) to the investor's in the ledger on a pro-rata basis.
 
-- functions to convert USD pricing into STX amounts
+## License
 
-- functions used to iterate over the options-ledger entries
+GPL-3.0

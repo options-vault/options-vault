@@ -1,7 +1,5 @@
 ;; vault
-;; Balance holder that has withdraw/deposit functions, and ledger storage
 
-;; constants
 (define-constant CONTRACT_ADDRESS (as-contract tx-sender))
 
 (define-constant ERR_INVALID_AMOUNT (err u100))
@@ -11,8 +9,6 @@
 (define-constant ERR_ONLY_CONTRACT_ALLOWED (err u104))
 (define-constant ERR_TX_NOT_APPLIED_YET (err u105))
 (define-constant ERR_PREMIUM_NOT_SPLITTED_CORRECTLY (err u106))
-
-;; data maps and vars
 
 ;; Ledger map to store balances and withdraw/deposit requests for each principal (investor type / vault)
 (define-map ledger principal { address: principal, balance: uint, pending-deposits: uint, pending-withdrawal: uint })
@@ -25,10 +21,6 @@
 (define-data-var total-pending-deposits uint u0)
 
 (define-data-var settlement-block-height uint u0)
-
-;; private functions
-
-;; Functions that checks what is the user's balance/pending-withdrawal/pending-deposit in the vault
 
 ;; Balance helper functions
 (define-read-only (get-ledger-entry (investor principal))
@@ -56,7 +48,7 @@
   (- (get-pending-deposit) amount)
 )
 
-;; Withdraw helper functions
+;; Withdrawal helper functions
 (define-read-only (get-pending-withdrawal) 
   (default-to u0 (get pending-withdrawal (map-get? ledger tx-sender)))
 )
@@ -74,11 +66,10 @@
   (var-set investor-addresses (unwrap-panic (as-max-len? (append (var-get investor-addresses) investor) u1000)))
 )
 
-;; public functions
-
 ;; DEPOSITS FUNCTIONS
 
-;; <process-deposits>: Traverses investor-addresses list applying process-deposits-updater function to update the balance of each investor
+;; <process-deposits>: The function iterates over the `investor-addresses` list and applies the `pending-deposits` amount to 
+;;                     the investor's ledger `balance`.
 ;; TODO: Only allow options-nft contract to call this function
 (define-public (process-deposits)
   (begin
@@ -111,7 +102,7 @@
   )
 )
 
-;; <deposit-premium>: Transfers the premium that comes from an user2 type when buys an option NFT
+;; <deposit-premium>: The function transfers the STX amount paid by user 2 for minting an options NFT (the premium) to the vault contract.
 (define-public (deposit-premium (amount uint) (original-sender principal)) 
   (begin
     (asserts! (> amount u0) ERR_INVALID_AMOUNT)
@@ -121,9 +112,9 @@
   )
 )
 
-;; <queue-deposit>: Transfers a deposit amount from an investor user to the vault contract and adds this amount to pending-deposit
-;;                  property under the investor address key found in the ledger, if it is a new investor, the function creates a new investor in the ledger
-;;                  Also adds the investor address in investor-address list, if it is a new one, and increments total-pending-deposits by the amount deposited
+;; <queue-deposit>: The function transfers the deposited STX amount to the vault contract and adds the amount to the `pending-deposits`
+;;                  property of the investor's entry in the vault `ledger`. If it is the first deposit for the investor, the function
+;;                  adds the investor's address (principal) to the`investor-addresses` list.
 (define-public (queue-deposit (amount uint)) 
   (begin
     (asserts! (not (is-eq tx-sender CONTRACT_ADDRESS)) ERR_VAULT_NOT_ALLOWED)
@@ -157,8 +148,9 @@
 
 ;; WITHDRAWAL FUNCTIONS
 
-;; <process-withdrawals>: Traverses investor-addresses list applying process-withdrawals-updater function to execute the withdrawal
-;;                        requested by each investor.
+;; <process-withdrawals>: The function iterates over the `investor-addresses` list and applies the `pending-withdrawal` amount to the investor's
+;;                        ledger `balance`. If the investor has the necessary balance available the function processes the withdrawal by sending
+;;                        an on-chain STX transfer for the requested amount.
 (define-public (process-withdrawals)
   (begin
     (map process-withdrawals-updater (var-get investor-addresses))
@@ -167,7 +159,7 @@
   )
 )
 
-;; <investors-filter>: Checks if the investor exists in the ledger, if not, then the filter function will discard it from the investors list
+;; <investors-filter>: Filters out investors from the investor-addresses list that no longer have a balance.
 (define-private (investors-filter (investor principal)) 
   (is-some (map-get? ledger investor))
 )
@@ -185,7 +177,7 @@
           (investor-withdrawal-allowed (if (> investor-pending-withdrawal investor-balance) investor-balance investor-pending-withdrawal))
         )
         (if (> investor-pending-withdrawal u0)
-            ;; if investor's balance is equal or greater than its pending-withdrawal amount
+            ;; if investor's balance is equal or greater than the pending-withdrawal amount
             ;; and investor's pending-withdrawal amount is greater than 0
             (begin
               (try! (as-contract (stx-transfer? investor-withdrawal-allowed tx-sender investor-address)))
@@ -216,8 +208,8 @@
   )
 )
 
-;; <queue-withdrawal>: Adds the amount to pending-withdrawal amount for the investor in the ledger that wants to request a withdrawal
-;;                     which will be executed at the end of the current cycle
+;; <queue-withdrawal>: The function adds the requested withdrawal amount to the pending-withdrawal property of the investor's entry in the vault ledger. 
+;;                     The function does not send an on-chain transaction but only queues the withdrawal to be processed at the end of the cycle with process-withdrawal.
 (define-public (queue-withdrawal (amount uint)) 
   (let  (
           (investor-balance (unwrap! (get-ledger-entry tx-sender) ERR_TX_SENDER_NOT_IN_LEDGER))
@@ -241,7 +233,7 @@
 
 ;; PNL FUNCTIONS
 
-;;<distribute-pnl>: Distributes the premium between all the investor in the vault according to their participation rate
+;;<distribute-pnl>: The function distributes the cycle's profit and loss (pnl) to the investor's in the ledger on a pro-rata basis.
 (define-public (distribute-pnl (settlement-tx-confirmed bool))
   (begin
     ;; ;; (asserts! (is-eq CONTRACT_ADDRESS tx-sender) ONLY_CONTRACT_ALLOWED)
@@ -292,7 +284,6 @@
   )
 )
 
-;; Consult the total investor balances
 (define-read-only (get-total-balances) 
   (var-get total-balances)
 )
@@ -314,7 +305,9 @@
 )
 
 
-;; TX to settlement contract what is owed to users2 type
+;; <create-settlement-pool>: The function transfers the STX amount owed to the cycle's NFT holders to the `options-nft` contract,
+;;                           effectively creating a settlement-pool. It is called by the `options-nft` contract as part of the logic
+;;                           for `determine-value-and-settle` and only executes in case of an in-the-money options NFT.
 ;; #[allow(unchecked_data)]
 (define-public (create-settlement-pool (amount uint) (settlement-contract principal))
   (begin
