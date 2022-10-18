@@ -184,8 +184,12 @@ The function transfers the STX amount paid by user 2 for minting an options NFT 
 
 The function distributes the cycle's profit and loss (pnl) to the investor's in the ledger on a pro-rata basis.
 
-### helper functions
+### Helper functions
 
 - functions to convert USD pricing into STX amounts
 
 - functions used to iterate over the options-ledger entries
+
+## License
+
+GPL-3.0
