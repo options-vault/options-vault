@@ -98,7 +98,7 @@ Independently from the value of the options NFT, the balances of the vault's int
 **III. Ledger updates and payement processing**\
 Intra-week deposits and withdrawals are kept seperate from the vault `balance` and are tracked in the `pending-deposits` and `pending-withdrawal` ledger entries. Once the settlement process has been completed, the vault contract processes both deposits and withdrawals and sends the corresponding on-chain transactions. Note that deposits are processed on-chain immediately when requested by the user, while Withdrawals are only sent in bulk at the end of every cycle.
 
-### Detailed descriptions of the functions in the `options-nft` contract
+### Detailed description of the functions in the `options-nft` contract
 
 **:star2: _`submit-price-data`_**
 
@@ -154,7 +154,7 @@ The function decrements the `options-price-in-usd` by 2% every 30 minutes.
 
 The claim function allows user 2 to send in an option NFT and claim the STX equivalent of the `option-pnl` at expiry.  The function receives pricing data from a Redstone oracle and verifies that it was signed by a trusted public key. It additionally receives the `token-id` of the option NFT that is to be claimed. Via the `find-expiry` method the function determines the expiry-date of the NFT by traversing the `options-ledger-list` looking for the `cycle-tuple` entry that corresponds to the `token-id`. If `option-pnl` is above zero the contract sends a STX transfer to the NFT holder.
 
-### Detailed descriptions of the functions in the `vault` contract
+### Detailed description of the functions in the `vault` contract
 
 **:star2: _`queue-deposit`_**
 
