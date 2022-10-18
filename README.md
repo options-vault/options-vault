@@ -101,27 +101,27 @@ Intra-week deposits and withdrawals are kept seperate from the vault `balance` a
 
 ### Function descriptions options-nft contract
 
-**(A) _`submit-price-data`_**
+**:star2: _`submit-price-data`_**
 
 The function receives Redstone data packages from the server and verifies if the data has been signed by a trusted Redstone oracle's public key. The function additionally contains a time-based control flow that can trigger `end-currrent-cycle`, `update-ledger` and `init-next-cycle` based on when in the cycle it is called. The first time price and time data gets submitted _after_ `current-cycle-expiry`, end-current-cycle gets executed with `determine-value-and-settle` containing the majority of the business logic. If the cycle's options NFT is in-the-money a `settlement-pool` gets created. In this case the control flow in `submit-price-data` waits until _after_ the settlement transaction has been mined before executing `update-vault-ledger` and `init-next-cycle`.
 
 
-**(B) _`end-current-cycle`_**
+**:star2: _`end-current-cycle`_**
 
 The function is only executed once the current-cycle is expired. It calls `determine-value-and-settle` and adds the expired cycles information to the `options-ledger-list`.
 
 
-**(C) _`determine-value-and-settle`_**
+**:star2: _`determine-value-and-settle`_**
 
 The function calculates the expired option's value and updates the `options-ledger` entry with the corresponding `option-pnl` (profit and loss). If the `option-pnl` is positive, the function calls the `create-settlement-pool` method in the vault contract.
 
 
-**(D) _`update-vault-ledger`_**
+**:star2: _`update-vault-ledger`_**
 
 The function calls three methods in the vault contract: `distribute-pnl`, `process-deposits` and `process-withdrawals`.
 
 
-**(E) _`init-next-cycle`_**
+**:star2: _`init-next-cycle`_**
 
 The function sets the `next-cycle-expiry` date and then calls `calculate-strike` to determine the next cycles strike price. It then uses the information to create a new entry in the `opions-ledger`. It sets the USD price by calling `set-options-price` and then determines and sets a series of variables for the upcoming auction":
 - The `auction-starttime` is 2 hours after the last cycyles expiry
@@ -131,27 +131,27 @@ The function sets the `next-cycle-expiry` date and then calls `calculate-strike`
 It finally sets `current-cycle-expiry` to one week after the last expiry date.
 
 
-**(F) _`calculate-strike`_**
+**:star2: _`calculate-strike`_**
 
 A simple calculation to set the strike price 15% higher than the current price of the underlying asset. In the next iteration we intend to replace this simplified calculation with a calculation that takes more variables (i.e. volatility) into account. Since the beginning of the auction is somewhat variable (there is a small chance that it starts later than normal-start-time) it would help risk-management to make the calculate-strike and/or the set-optons-price functions dependent on the time-to-expiry, which would allow to more accurately price the option's time value.
 
 
-**(G) _`set-options-price`_**
+**:star2: _`set-options-price`_**
 
 The price is determined using a simplified calculation that sets `options-price-in-usd` to 0.5% of the `stxusd-rate`. If all 52 weekly options for a year expiry worthless, a uncompounded 26% APY would be achieved by this pricing strategy. In the next iteration we intend to replace this simplified calculation with the Black Scholes formula - the industry standard for pricing European style options.
 	
 
-**(H) _`mint`_**
+**:star2: _`mint`_**
 
 The mint function allows user 2 to purchase options NFTs during a 3 hour auction window. The function receives pricing data from a Redstone oracle and verifies that it was signed by a trusted public key. The function calls `update-options-price-in-usd` which decrements tthe `options-price-in-usd` by 2% every 30 minutes. Subsequently, the function calls `deposit-premium` in the vault contract which transfers the STX equivalent of the `options-price-in-usd` (which is calculated by `get-update-latest-price-in-stx`) from the user to the vault contract and in return the user receives an `options-nft`. Finally, the function updates the `last-token-id` in the `options-ledger` to the newly minted options NFTs `token-id`.
 
 
-**(I) _`update-options-price-in-usd`_**
+**:star2: _`update-options-price-in-usd`_**
 
 The function decrements the `options-price-in-usd` by 2% every 30 minutes.
 
 
-**(J) _`claim`_**
+**:star2: _`claim`_**
 
 The claim function allows user 2 to send in an option NFT and claim the STX equivalent of the `option-pnl` at expiry.  The function receives pricing data from a Redstone oracle and verifies that it was signed by a trusted public key. It additionally receives the `token-id` of the option NFT that is to be claimed. Via the `find-expiry` method the function determines the expiry-date of the NFT by traversing the `options-ledger-list` looking for the `cycle-tuple` entry that corresponds to the `token-id`. If `option-pnl` is above zero the contract sends a STX transfer to the NFT holder.
 
