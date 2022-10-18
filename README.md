@@ -58,7 +58,7 @@ _Side note: the current implementation uses STX as the underlying asset. However
 The high-level overview covers the key parts of the system, but let's now go a layer deeper and look at the contract mechanics under the hood.
 
 ### Smart contract design
-The Dapp is comprised of **two smart contracts**:\
+The Dapp is comprised of **two smart contracts**:
 
 (1) The `vault` contract which
   - holds all of user 1's funds
