@@ -52,8 +52,7 @@
 		strike: uint, 
 		first-token-id: uint, 
 		last-token-id: uint, 
-		option-pnl: (optional uint), 
-		total-pnl: (optional uint) 
+		option-pnl: (optional uint)
 	}
 ) 
 ;; A list that holds a tuple with the cycle-expiry and the last-token-id minted for that expiry
@@ -69,6 +68,8 @@
 
 (define-constant week-in-milliseconds u604800000)
 (define-constant min-in-milliseconds u60000)
+
+(define-data-var times-decrement-applied uint u0)
 
 ;; TODO: 
 
@@ -111,14 +112,21 @@
 			current-cycle-expired 
 			(> block-height (var-get settlement-block-height)) ;; TODO rename to settlement-tx-broadcast-block-height
 			) 
-				(begin ;; TODO abstract all vault contract-calls into a helper function called update-vault-ledger
-					(try! (contract-call? .vault distribute-pnl (var-get settlement-tx-in-mempool)))
-					(unwrap! (contract-call? .vault process-deposits) ERR_PROCESS_DEPOSITS)
-					(unwrap! (contract-call? .vault process-withdrawals) ERR_PROCESS_WITHDRAWALS)
+				(begin
+					(try! (update-vault-ledger))
 					(unwrap! (init-next-cycle) ERR_CYCLE_INIT_FAILED) 
 				)
 				true
 		)
+		(ok true)
+	)
+)
+
+(define-private (update-vault-ledger) 
+	(begin 
+		(try! (contract-call? .vault distribute-pnl (var-get settlement-tx-in-mempool)))
+		(unwrap! (contract-call? .vault process-deposits) ERR_PROCESS_DEPOSITS)
+		(unwrap! (contract-call? .vault process-withdrawals) ERR_PROCESS_WITHDRAWALS)
 		(ok true)
 	)
 )
@@ -165,11 +173,10 @@
 		(map-set options-ledger 
 			{ cycle-expiry: next-cycle-expiry } 
 			{ 
-			strike: strike, 
-			first-token-id: first-token-id, 
-			last-token-id: first-token-id,
-			option-pnl: none,
-			total-pnl: none 
+				strike: strike, 
+				first-token-id: first-token-id, 
+				last-token-id: first-token-id,
+				option-pnl: none
 			}
 		)
 
@@ -178,6 +185,7 @@
 			(var-set auction-start-time normal-start-time)	
 			(var-set auction-start-time now)
 		)
+		(var-set times-decrement-applied u0)
 		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
 		(var-set options-for-sale (/ (contract-call? .vault get-total-balances) stacks-base))
 		(var-set settlement-tx-in-mempool false)
@@ -209,8 +217,7 @@
 					(merge
 						settlement-options-ledger-entry
 						{ 
-							option-pnl: (some (usd-to-stx (- stxusd-rate strike) stxusd-rate)), 
-							total-pnl: (some (usd-to-stx (* (- stxusd-rate strike) options-minted-amount) stxusd-rate))
+							option-pnl: (some (usd-to-stx (- stxusd-rate strike) stxusd-rate))
 						}
 					)
 				)
@@ -225,8 +232,7 @@
 				(merge
 					settlement-options-ledger-entry
 					{ 
-						option-pnl: (some u0), 
-						total-pnl: (some u0) 
+						option-pnl: (some u0)
 					}
 				)
 			)
@@ -294,8 +300,19 @@
 	(let
 		(
 			(decrement (* (/ (- timestamp (var-get auction-start-time)) (* min-in-milliseconds u30)) (var-get auction-decrement-value)))
+			(time-for-next-update (+ (var-get auction-start-time) (* (* min-in-milliseconds u30) (if (> (var-get times-decrement-applied) u0) (var-get times-decrement-applied) u1))))
 		)
-		(ok (var-set options-price-in-usd (some (- (unwrap-panic (var-get options-price-in-usd)) decrement))))
+		(if (and 
+					(>= timestamp time-for-next-update)
+					(>= u5 (var-get times-decrement-applied))
+				)
+				(begin 
+					(var-set options-price-in-usd (some (- (unwrap-panic (var-get options-price-in-usd)) decrement)))
+					(var-set times-decrement-applied (+ (var-get times-decrement-applied) u1))
+				)
+				true
+		)
+		(ok true)
 	)
 )
 
@@ -326,17 +343,16 @@
 
 		;; TODO: Replace with an if statement that checks if the option-pnl is above zero.
 		;; The current implementation leads to a runtime error for OTM options
-		(match option-pnl
-			payout
+		(if (> (unwrap-panic option-pnl) u0) 
 			(begin
 				;; Transfer options NFT to settlement contract
 				(try! (transfer token-id tx-sender (as-contract tx-sender)))
 				;; Transfer STX out of th settlement pool to tx-sender
-				(try! (as-contract (stx-transfer? payout tx-sender recipient)))
-				(ok true)
+				(try! (as-contract (stx-transfer? (unwrap-panic option-pnl) tx-sender recipient)))
 			)
-			ERR_OPTION_NOT_EXPIRED
+			true
 		)
+		(ok true)
   )
 )
 
@@ -512,8 +528,7 @@
 			strike: strike, 
 			first-token-id: u1, 
 			last-token-id: u1,
-			option-pnl: none,
-			total-pnl: none 
+			option-pnl: none
 			}
 		)
 		)
