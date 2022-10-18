@@ -1,6 +1,5 @@
 # :moneybag: Options Vaults :moneybag:
-## Earn Income With Automated Options Arbitrage Strategies
-## A DeFi App to that uses Automated Options Arbitrage Strategies To Earn Income On your Crypto
+## A DeFi App to Earn Income With Automated Options Arbitrage Strategies
 
 Options yield vaults give you the ability to allocate your crypto to an automated options strategy to generate income.  All you need to do is deposit crypto into our vault and the Clarity smart contracts execute a simple [covered call](https://www.investopedia.com/terms/c/coveredcall.asp) options arbitrage strategy for you.
 
