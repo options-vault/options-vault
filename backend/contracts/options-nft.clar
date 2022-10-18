@@ -63,7 +63,7 @@
 (define-data-var auction-start-time uint u0) ;; TODO: Since this is set to the cycle beginning (previous cycle-expiry) this variable is no longer needed
 (define-data-var auction-decrement-value uint u0)
 
-(define-data-var settlement-block-height uint u0) 
+(define-data-var settlement-broadcast-block-height uint u0) 
 (define-data-var settlement-tx-in-mempool bool false) ;; TODO: Write init-first-cycle where this is set to true and set it to false by default
 
 (define-constant week-in-milliseconds u604800000)
@@ -80,8 +80,9 @@
 ;; TODO: Add functions to set start-init-window and end-init-window
 ;; TODO: Instead of passing timestamp from receiver functions to later functions, get the timestamp from last-seen-timestamp
 
-;; FUNCTION TO RECEIVE & VALIDATE PRICE DATA FROM REDSTONE SERVER + CONTROL CENTER FUNCTION 
-
+;;<submit-price-data>: The function receives Redstone data packages from the server and verifies if the data has been signed by
+;;										 a trusted Redstone oracle's public key. The function additionally contains a time-based control flow that
+;; 										 can trigger end-currrent-cycle, update-ledger and init-next-cycle
 ;; TODO: implement helper function that abstracts away recover-signer contract call and is-trusted-oracle assert 
 ;; #[allow(unchecked_data)]
 (define-public (submit-price-data (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65)))
@@ -93,11 +94,11 @@
 		)
 		;; Check if the signer is a trusted oracle.
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
-		;; Check if the data is not stale, depending on how the app is designed. TODO: is last-block-timestamp check necessary?
+		;; Check if the data is not stale
 		(asserts! (> timestamp (get-last-block-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than the last block timestamp.
 		(asserts! (>= timestamp (var-get last-seen-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than or equal to the last seen timestamp.
 
-		(var-set last-stxusd-rate (get value (element-at (filter is-stx entries) u0))) ;; TODO: check if stxusd is always the first entry in the list after filtering
+		(var-set last-stxusd-rate (get value (element-at (filter is-stx entries) u0))) 
 		(var-set last-seen-timestamp timestamp)		
 
 		(if (and
@@ -110,7 +111,7 @@
 
 		(if (and 
 			current-cycle-expired 
-			(> block-height (var-get settlement-block-height)) ;; TODO rename to settlement-tx-broadcast-block-height
+			(> block-height (var-get settlement-broadcast-block-height)) 
 			) 
 				(begin
 					(try! (update-vault-ledger))
@@ -224,7 +225,7 @@
 				;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
 				(try! (contract-call? .vault create-settlement-pool (usd-to-stx (* (- stxusd-rate strike) options-minted-amount) stxusd-rate) (as-contract tx-sender)))
 				(var-set settlement-tx-in-mempool true)
-				(var-set settlement-block-height block-height)
+				(var-set settlement-broadcast-block-height block-height)
 			)
 			;; Option is out-of-the-money, pnl is zero
 			(map-set options-ledger 
@@ -560,17 +561,17 @@
 	(var-get options-for-sale)
 )
 
-;; settlement-block-height
+;; settlement-broadcast-block-height
 ;; #[allow(unchecked_data)]
-(define-public (set-settlement-block-height (height uint)) 
+(define-public (set-settlement-broadcast-block-height (height uint)) 
 	(begin
 		(asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_CONTRACT_OWNER)
-		(ok (var-set settlement-block-height height))
+		(ok (var-set settlement-broadcast-block-height height))
 	)	
 )
 
-(define-read-only (get-settlement-block-height) 
-	(var-get settlement-block-height)
+(define-read-only (get-settlement-broadcast-block-height) 
+	(var-get settlement-broadcast-block-height)
 )
 
 ;; options-ledger-list
