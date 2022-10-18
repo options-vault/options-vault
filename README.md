@@ -76,6 +76,9 @@ The Dapp is comprised of **two smart contracts**:\
 In order to offer options contract with calendar expiry dates (instead of block times), we use a Redstone oracle as a reliable, decentralized source for feeding calendar timestamps (and the corresponding STXUSD prices) to our smart contracts. A server streams the Redstone data packages to our options-nft smart contract in pre-deteremined time intervals. (Note: the current implementation does _not_ include the server).
 
 ### Cycles
+
+![Cycle Overview](https://github.com/options-vault/options-vault/blob/dev/assets/cycle-overview.png)
+
 The whole app revolves around a one week cycle. The variable `current-cycle-expiry`, which holds the UNIX timestamp of the current cycle's epxiry. This variable acts as the contract's internal clock. 
 
 A cycle plays out as follows:
@@ -96,8 +99,6 @@ Independently from the value of the options NFT, the balances of the vault's int
 
 **III. Ledger updates and payement processing**\
 Intra-week deposits and withdrawals are kept seperate from the vault `balance` and are tracked in the `pending-deposits` and `pending-withdrawal` ledger entries. Once the settlement process has been completed, the vault contract processes both deposits and withdrawals and sends the corresponding on-chain transactions. Note that deposits are processed on-chain immediately when requested by the user, while Withdrawals are only sent in bulk at the end of every cycle.
-
-[INSERT PICTURE/EXCALIDRAW DEPICTING THE CYCLE]
 
 ### Function descriptions options-nft contract
 
