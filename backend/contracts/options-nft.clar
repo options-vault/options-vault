@@ -101,7 +101,7 @@
 
 		(if (and
 			current-cycle-expired
-			(not (var-get settlement-tx-in-mempool)) ; TODO rename to settlement-broadcast-block-height
+			(not (var-get settlement-tx-in-mempool)) ;; TODO rename to settlement-broadcast-block-height
 			)
 				(try! (end-current-cycle)) ;; TODO: Should end-current-cyle and determine-value-and-settle be consolidated into one function?
 				true
