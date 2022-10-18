@@ -27,10 +27,65 @@ We believe that by automating the execution using Clarity smart contracts we can
 
 Stacks is in a unique position to become the smart contracting layer for Bitcoin and by extension the home of Bitcoin DeFi. In making sustainable yield strategies available on Stacks we believe that we can help unlock the ecosystem's potential and contribute to accelerated user adoption.
 
-### How does it work?
+### How does it work? - A first high level overview
 
-![App Overview](https://github.com/options-vault/options-vault/blob/dev/options-yield-vault-overview-2.png)
+![App Overview](https://github.com/options-vault/options-vault/blob/dev/options-vault-overview-wide.png)
 
+There are two **user types**:
+
+- **User 1 (Saver/Investor)**: Deposits STX into the vaul to generate income via the covered call strategy
+- **User 2 (Speculator)**: Buys call option on STX to profit from price appreciation
+
+Let's take a look at the simplified **user flow**
+
+(1) User 1 deposits STX to the vault contract\
+(2) The vault makes the deposited STX available to the auction\
+(3) The auction sells one week call options on STXUSD for 15% above the spot price to user 2\
+(4) The option buyer gets send an NFT which represents the call option\
+
+**Scenario 1**: Option holds value at expiry ("in-the-money")\
+(5) User 2 sends options NFT to settlement contract\
+(6) The settlement contract, using a price provided by a [Redstone](https://www.redstone.finance) oracle, determines the value of the option\
+(7) The settlement contract sends the option value to user 2
+
+**Scenario 2**: Option expires worthless ("out-of-the-money")\
+(7) The auction contract pays out the proceeds from selling the options contracts to the vault\
+(8) User 1 has the option to withdraw 
+
+_Side note: the current implementation uses STX as the underlying asset. However, with only slight changes to less than 5% of the codebase the contract could be used with any other asset on the Satcks blockchain. And with the help of dlc.link technology option yield vaults containing native Bitcoin and paying out native Bitcoin yields could be created - this is the long-term vision of the project._
+
+### How does it work? - Let's dig deeper
+
+The high-level overview covers the key parts of the system, but let's now go a layer deeper and look at the contract mechanics under the hood.
+
+In order to offer options contract with expiry dates that are adhering to the industry standard, we need to introduce calendar time to our smart contracts. We have chosen to use timestamps (and corresponding STXUSD prices) provided by the Redstone oracle. A server will stream the Redstone data packages to our options-nft smart contract in pre-deteremined time intervals. (Note: the current implementation does not include the server).
+
+The Dapp is comprised of **two smart contracts**:\
+
+(1) The `vault` contract which
+  - holds all of user 1's funds
+  - keeps an internal ledger tracking each principal's balance 
+  - allows for deposits and withdrawals 
+
+(2) The `options-nft` contract which contains a
+  - a function to receive Redstone timestamp and price data
+  - the logic to algorithmically determine and set the options strike price
+  - a mechanism that sells option NFTs via a simple auction 
+  - the logic to calculate the value of an expired option NFT and create a settlement pool with all the funds owed to user 2
+  - a function that allows user 2 to claim the value of an in-the-money option NFT from the settlement pool
+ 
+The whole app revolves around a one week cycle, with the variable `current-cycle-expiry` acting as the contract's internal clock. 
+
+A cycle plays out as follows
+
+1. **Auction**: During a 3hr auction that decreases the price by 2% every 30min (dutch auction) user 2 gets the ability to buy option NFTs on STXUSD. The options have a one week expiry (every Friday at 4pm GMT) and a strike price of 15% above the spot price. 
+
+2. **Settlement**: Once the option has expired the contract settles the options NFT by 
+
+3.  After expiry end-cycle:
+- determine value
+  - For ITM scenario: send settlement transaction
+- 
 
 
 

@@ -39,7 +39,7 @@
   (+ (default-to u0 (get-ledger-entry investor)) amount)
 )
 
-(define-private (substract-to-balance (amount uint) (investor principal)) 
+(define-private (subtract-to-balance (amount uint) (investor principal)) 
   (- (default-to u0 (get-ledger-entry investor)) amount)
 )
 ;; TODO: Check if there is neccesary to add investor as parameter for each helper function
@@ -52,7 +52,7 @@
   (+ (get-pending-deposit) amount)
 )
 
-(define-private (substract-pending-deposit (amount uint)) 
+(define-private (subtract-pending-deposit (amount uint)) 
   (- (get-pending-deposit) amount)
 )
 
@@ -61,7 +61,7 @@
   (default-to u0 (get pending-withdrawal (map-get? ledger tx-sender)))
 )
 
-(define-private (substract-pending-withdrawal (amount uint)) 
+(define-private (subtract-pending-withdrawal (amount uint)) 
   (-  (get-pending-withdrawal) amount)
 )
 
@@ -172,9 +172,9 @@
   (is-some (map-get? ledger investor))
 )
 
-;; <process-withdrawals-updater>: Substracts the pending-withdrawal amount (and resets it) from balance amount for each investor in the ledger
+;; <process-withdrawals-updater>: Subtracts the pending-withdrawal amount (and resets it) from balance amount for each investor in the ledger
 ;;                                and make a transfer of the pending-withdrawal amount from the vaul contract to the investor's address, but 
-;;                                only if there is some conditions true, also substracts this amount from total-balances to keep this variable 
+;;                                only if there is some conditions true, also subtracts this amount from total-balances to keep this variable 
 ;;                                updated.
 (define-private (process-withdrawals-updater (investor principal)) 
   (let  (
@@ -196,7 +196,7 @@
                   investor-info
                   {
                     balance: 
-                      (substract-to-balance investor-withdrawal-allowed investor),
+                      (subtract-to-balance investor-withdrawal-allowed investor),
                     pending-withdrawal:
                       u0
                   }  

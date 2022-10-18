@@ -349,7 +349,7 @@ Clarinet.test({
 })
 
 Clarinet.test({
-    name: "Ensure that distribute-pnl function substracts the correct amount to each investor's balance if there is pnl for case 3 (user 1 losses and user 2 receives yield)",
+    name: "Ensure that distribute-pnl function subtracts the correct amount to each investor's balance if there is pnl for case 3 (user 1 losses and user 2 receives yield)",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
