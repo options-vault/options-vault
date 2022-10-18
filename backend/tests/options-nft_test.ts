@@ -143,7 +143,7 @@ Clarinet.test({
 				])
 	
 				// TODO MAKE OUT OF MONEY NFT CLAIM
-				block.receipts[0].events.expectSTXTransferEvent(194694, optionsNFTContract, wallet_1);
+				block.receipts[0].events.expectSTXTransferEvent(194694, optionsNFTContract, wallet_2);
 			}
 		})
 
@@ -575,13 +575,3 @@ Clarinet.test({
 		assertEquals(optionsLedgerList.result.expectList()[0].includes(testCycleExpiry), true)
 	}
 })
-
-
-
-// Test init-next-cycle
-// Test claim
-
-// Test distribute-pnl
-// Test process-deposits
-// Test process-withdrawals
-
