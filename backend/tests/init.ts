@@ -222,7 +222,7 @@ export function initFirstAuction(
 
 // creates a deposits, inits auction, buys 2 nfts, closes auction and initializes claim period
 // 
-export function initAuctionReadyToClaim(chain: Chain, accounts: Map<string, Account>){
+export function initAuctionReadyToClaim(chain: Chain, accounts: Map<string, Account>, inTheMoney: bool){
   const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 	
 			let block = createTwoDepositorsAndProcess(chain, accounts)
@@ -240,7 +240,7 @@ export function initAuctionReadyToClaim(chain: Chain, accounts: Map<string, Acco
 				deployer.address,
 				testAuctionStartTime, 
 				testCycleExpiry,  
-				testInTheMoneyStrikePriceMultiplier, 
+				inTheMoney ? testInTheMoneyStrikePriceMultiplier : testOutOfTheMoneyStrikePriceMultiplier, 
 				redstoneDataOneMinApart
 			);
 			assertEquals(block.receipts.length, 5);

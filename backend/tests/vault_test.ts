@@ -199,22 +199,6 @@ Clarinet.test({
 })
 
 Clarinet.test({
-    name: "Ensure that distribute pnl can only be called during the right time",
-    fn(chain: Chain, accounts: Map<string, Account>) {
-		const wallet_1 = accounts.get('wallet_1')!.address;
-
-        let block = chain.mineBlock([
-            Tx.contractCall("vault", "distribute-pnl", [ types.bool(true) ], wallet_1),
-        ])
-
-        // console.log(block.receipts[0])
-
-        // ERR TX NOT APPLIED YET
-        block.receipts[0].result.expectErr().expectUint(errorCodes.TX_NOT_APPLIED_YET);
-    }
-})
-
-Clarinet.test({
     name: "Ensure that distribute-pnl function adds the correct yield to each investor's balance if the pnl is 0",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
