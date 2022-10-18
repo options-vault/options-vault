@@ -2,7 +2,7 @@ import { Clarinet, Tx, Chain, Account, types } from 'https://deno.land/x/clarine
 import { assert, assertEquals } from 'https://deno.land/std@0.90.0/testing/asserts.ts';
 import { createTwoDepositorsAndProcess, submitPriceData, initFirstAuction, redstoneDataOneMinApart } from "./init.ts"
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
-import { testConfig, createMintingAuction } from './init.ts';
+import { testConfig } from './init.ts';
 
 const errorCodes = {
     INVALID_AMOUNT : 100,

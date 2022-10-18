@@ -41,6 +41,29 @@ export type RedstoneData = {
   providerPublicKey: string
 };
 
+export type PriceDataForContract = {
+    timestamp: string,
+    price: string,
+    signature: string
+
+}
+
+export function convertRedstoneToContractData(redstoneDataPoint : RedstoneData): PriceDataForContract{
+  const pricePackage: PricePackage = {
+    timestamp: redstoneDataPoint.timestamp,
+    prices: [{ symbol: "STX", value: redstoneDataPoint.value }]
+  }
+
+  const packageCV = pricePackageToCV(pricePackage)
+  const returnSig = types.buff(liteSignatureToStacksSignature(redstoneDataPoint.liteEvmSignature))
+
+  return{
+    timestamp: packageCV.timestamp,
+    price: packageCV.prices,
+    signature: returnSig
+  }
+}
+
 export function setTrustedOracle(chain: Chain, senderAddress: string): Block {
 	return chain.mineBlock([
 		Tx.contractCall("options-nft", "set-trusted-oracle", [trustedOraclePubkey, types.bool(true)], senderAddress),
@@ -72,6 +95,8 @@ export function createTwoDepositorsAndProcess(chain: Chain, accounts: Map<string
   ]);
   return block
 }
+
+
 
 // Submits price data and only runs test that function was executed properly, not that data was correctly set
 export function submitPriceData(
@@ -194,6 +219,47 @@ export function initFirstAuction(
     return block;
 }
 
+
+// creates a deposits, inits auction, buys 2 nfts, closes auction and initializes claim period
+// 
+export function initAuctionReadyToClaim(chain: Chain, accounts: Map<string, Account>){
+  const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+	
+			let block = createTwoDepositorsAndProcess(chain, accounts)
+			const totalBalances = chain.callReadOnlyFn(
+				"vault",
+				"get-total-balances",
+				[],
+				deployer.address
+			)
+			assertEquals(totalBalances.result, types.uint(3000000))
+	
+			// Initialize the first auction; the strike price is in-the-money (below spot)
+			block = initFirstAuction(
+				chain, 
+				deployer.address,
+				testAuctionStartTime, 
+				testCycleExpiry,  
+				testInTheMoneyStrikePriceMultiplier, 
+				redstoneDataOneMinApart
+			);
+			assertEquals(block.receipts.length, 5);
+	
+			// Mint two option NFTs
+			block = initMint(
+				chain, 
+				accountA.address, 
+				accountB.address, 
+				redstoneDataOneMinApart
+			)
+			assertEquals(block.receipts.length, 2);
+			
+			// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger the end-current-cycle method
+			block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+			block.receipts[0].result.expectOk().expectBool(true);
+      return block;
+}
+
 export function initMint(
   chain: Chain, 
   minterAddressA: string,
@@ -289,46 +355,6 @@ export function setEnvironmentForEndCurrentCycle({
 
     return { block, deployer, packageCV, currentCycleExpiry, signature };
 }
-
-export function createMintingAuction(chain : Chain, accounts: Map<string, Account>)
-  {
-   // depositors
-		const wallet_1 = accounts.get('wallet_1')!.address;
-    const wallet_2 = accounts.get('wallet_2')!.address;
-    // speculators
-    const wallet_3 = accounts.get('wallet_3')!.address;
-    const wallet_4 = accounts.get('wallet_4')!.address;
-    const deployer = accounts.get('deployer')!.address; 
-    let block = createTwoDepositorsAndProcess(chain, accounts)
-		const totalBalances = chain.callReadOnlyFn(
-			"vault",
-			"get-total-balances",
-			[],
-			deployer
-		)
-		assertEquals(totalBalances.result, types.uint(3000000))
-
-		// Initialize the first auction; the strike price is in-the-money (below spot)
-		block = initFirstAuction(
-			chain, 
-			deployer,
-			testAuctionStartTime, 
-			testCycleExpiry,  
-			testInTheMoneyStrikePriceMultiplier, 
-			redstoneDataOneMinApart
-		);
-		assertEquals(block.receipts.length, 5);
-
-		// // Mint two option NFTs
-		// block = initMint(
-		// 	chain, 
-		// 	wallet_3, 
-		// 	wallet_4, 
-		// 	redstoneDataOneMinApart
-		// )
-
-    return block
-  }
 
 
 

@@ -3,7 +3,7 @@ import { Clarinet, Tx, Chain, Account, types, assertEquals, stringToUint8Array, 
 import type { PricePackage, Block } from "./deps.ts";
 import axiod from "https://deno.land/x/axiod@0.26.2/mod.ts";
 import { redstoneDataOneMinApart } from "./redstone-data.ts";
-import { createTwoDepositorsAndProcess, createTwoDepositors, initFirstAuction, initMint, setTrustedOracle, submitPriceData, submitPriceDataAndTest } from "./init.ts";
+import { PriceDataForContract, createTwoDepositorsAndProcess, createTwoDepositors, initFirstAuction, initMint, setTrustedOracle, submitPriceData, submitPriceDataAndTest, initAuctionReadyToClaim, convertRedstoneToContractData } from "./init.ts";
 
 const contractOwner = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM"
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
@@ -24,6 +24,65 @@ const testOptionsForSale = 3;
 const testOptionsUsdPricingMultiplier = 0.02
 const testOutOfTheMoneyStrikePriceMultiplier = 1.15 // 15% above spot
 const testInTheMoneyStrikePriceMultiplier = 0.8 // 20% below spot
+
+Clarinet.test({
+	name: "Ensure that user can claim with in the money nft",
+		fn(chain: Chain, accounts: Map<string, Account>) {
+			const [deployer, wallet_1, wallet_2] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
+			
+			//let block = createTwoDepositorsAndProcess(chain, accounts);
+			let block = initAuctionReadyToClaim(chain, accounts);
+
+			let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
+
+			block = chain.mineBlock([
+				Tx.contractCall("options-nft", "claim", [types.uint(1),dataForContract.timestamp, dataForContract.price, dataForContract.signature], wallet_1)
+			])
+
+
+			
+			block.receipts[0].events.expectSTXTransferEvent(194694, optionsNFTContract, wallet_1);
+		}
+	})
+
+	Clarinet.test({
+		name: "Ensure that user cannot claim with out of the money nft",
+			fn(chain: Chain, accounts: Map<string, Account>) {
+				const [deployer, wallet_1, wallet_2] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
+				
+				//let block = createTwoDepositorsAndProcess(chain, accounts);
+				let block = initAuctionReadyToClaim(chain, accounts);
+	
+				let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
+	
+				block = chain.mineBlock([
+					Tx.contractCall("options-nft", "claim", [types.uint(0),dataForContract.timestamp, dataForContract.price, dataForContract.signature], wallet_1)
+				])
+				console.log(block.receipts)
+	
+				
+				block.receipts[0].events.expectSTXTransferEvent(194694, optionsNFTContract, wallet_1);
+			}
+		})
+
+	Clarinet.test({
+		name: "Template for whole cycle",
+		fn(chain: Chain, accounts: Map<string, Account>) {
+			const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+	
+			let block = initAuctionReadyToClaim(chain, accounts)
+	
+			// We read the settlement-block-height from the on-chain contract
+			const settlementBlockHeight = chain.callReadOnlyFn(
+				"options-nft",
+				"get-settlement-block-height",
+				[],
+				deployer.address
+			)
+			// And expect it to be equal to the block-height of when it was set (in the last block)
+			settlementBlockHeight.result.expectUint(block.height - 1);
+		}
+	})
 
 // Testing setting trusted oracle
 Clarinet.test({
@@ -82,7 +141,7 @@ Clarinet.test({
 // Testing submit-price-data
 Clarinet.test({
 	name: "Ensure that anyone can submit price data signed by trusted oracles",
-	async fn(chain: Chain, accounts: Map<string, Account>) {
+	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [accountA] = ["wallet_1"].map(who => accounts.get(who)!);
 
 		const block = submitPriceData(chain, accountA.address, redstoneDataOneMinApart[0])
@@ -109,7 +168,7 @@ Clarinet.test({
 // Testing auction initalization outside of init-next-cycle
 Clarinet.test({
 	name: "Ensure that the options-nft auction is properly initialized",
-	async fn(chain: Chain, accounts: Map<string, Account>) {
+	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer] = ["deployer"].map(who => accounts.get(who)!);
 		const block = initFirstAuction(
 			chain, 
@@ -176,7 +235,7 @@ Clarinet.test({
 // Testing mint function
 Clarinet.test({
 	name: "Ensure that the mint function works for the right inputs",
-	async fn(chain: Chain, accounts: Map<string, Account>) {
+	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 		let block = initFirstAuction(
 			chain, 
@@ -232,7 +291,7 @@ Clarinet.test({
 // Test end-current-cycle function for an out-of-the-money option
 Clarinet.test({
 	name: "Ensure that the end-current-cycle function works for an out-of-the-money option",
-	async fn(chain: Chain, accounts: Map<string, Account>) {
+	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 		
 		let block = initFirstAuction(
@@ -272,7 +331,7 @@ Clarinet.test({
 // Test end-current-cycle function for in-the-money option
 Clarinet.test({
 	name: "Ensure that the end-current-cycle function works for an in-the-money option",
-	async fn(chain: Chain, accounts: Map<string, Account>) {
+	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 
 		const inTheMoneyStrikePrice = shiftPriceValue(redstoneDataOneMinApart[0].value * testInTheMoneyStrikePriceMultiplier)
@@ -334,7 +393,7 @@ Clarinet.test({
 // Test if the determine-value-and-settle function correclty sets settlement-block-height for in-the-money scenario
 Clarinet.test({
 	name: "Ensure that the determine-value-and-settle function correctly sets settlement-block-height for an in-the-money option",
-	async fn(chain: Chain, accounts: Map<string, Account>) {
+	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 
 		let block = createTwoDepositorsAndProcess(chain, accounts)
@@ -385,7 +444,7 @@ Clarinet.test({
 // Test that add-to-options-ledger-list function correctly adds the ended cycle-tuple
 Clarinet.test({
 	name: "Ensure that the add-to-options-ledger-list function correctly adds the ended cycle-tuple for an in-the-money option",
-	async fn(chain: Chain, accounts: Map<string, Account>) {
+	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 
 		let block = createTwoDepositorsAndProcess(chain, accounts)
@@ -435,8 +494,12 @@ Clarinet.test({
 	}
 })
 
+
+
+// Test init-next-cycle
+// Test claim
+
 // Test distribute-pnl
 // Test process-deposits
 // Test process-withdrawals
-// Test init-next-cycle
-// Test claim
+

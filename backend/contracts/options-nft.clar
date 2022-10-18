@@ -299,11 +299,11 @@
 ;; SETTLEMENT
 
 ;; #[allow(unchecked_data)] 
-(define-public (claim (token-id uint) (timestamp uint) (stxusd-rate uint) (signature (buff 65))) ;; claim
+(define-public (claim (token-id uint) (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65))) ;; claim
   (let
     (
       (recipient tx-sender)
-			(signer (try! (contract-call? .redstone-verify recover-signer timestamp (list {value: stxusd-rate, symbol: symbol-stxusd}) signature)))
+			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
 			(token-expiry (get timestamp (find-expiry token-id)))
 			(settlement-options-ledger-entry (try! (get-options-ledger-entry token-expiry)))
 			(option-pnl (get option-pnl settlement-options-ledger-entry))
