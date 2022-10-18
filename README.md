@@ -182,7 +182,7 @@ The function transfers the STX amount paid by user 2 for minting an options NFT 
 
 **:star2: _`distribute-pnl`_**
 
-The function distributes the cycle's profit and loss (pnl) to the investors in the ledger on a pro-rata basis.
+The function distributes the cycle's profit and loss (pnl) to the investors in the `ledger` on a pro-rata basis.
 
 ## License
 
