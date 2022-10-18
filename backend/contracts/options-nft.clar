@@ -69,7 +69,7 @@
 (define-constant week-in-milliseconds u604800000)
 (define-constant min-in-milliseconds u60000)
 
-(define-data-var decrement-applied bool false)
+(define-data-var times-decrement-applied uint u0)
 
 ;; TODO: 
 
@@ -185,7 +185,7 @@
 			(var-set auction-start-time normal-start-time)	
 			(var-set auction-start-time now)
 		)
-		(var-set decrement-applied false)
+		(var-set times-decrement-applied u0)
 		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
 		(var-set options-for-sale (/ (contract-call? .vault get-total-balances) stacks-base))
 		(var-set settlement-tx-in-mempool false)
@@ -300,13 +300,17 @@
 	(let
 		(
 			(decrement (* (/ (- timestamp (var-get auction-start-time)) (* min-in-milliseconds u30)) (var-get auction-decrement-value)))
+			(time-for-next-update (+ (var-get auction-start-time) (* (* min-in-milliseconds u30) (if (> (var-get times-decrement-applied) u0) (var-get times-decrement-applied) u1))))
 		)
-		(if (var-get decrement-applied) 
-			true
-			(begin 
-			 	(var-set options-price-in-usd (some (- (unwrap-panic (var-get options-price-in-usd)) decrement)))
-				(var-set decrement-applied true)
-			)
+		(if (and 
+					(>= timestamp time-for-next-update)
+					(>= u5 (var-get times-decrement-applied))
+				)
+				(begin 
+					(var-set options-price-in-usd (some (- (unwrap-panic (var-get options-price-in-usd)) decrement)))
+					(var-set times-decrement-applied (+ (var-get times-decrement-applied) u1))
+				)
+				true
 		)
 		(ok true)
 	)
