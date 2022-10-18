@@ -28,7 +28,7 @@ Stacks is in a unique position to become the smart contracting layer for Bitcoin
 
 ## How does it work? - A first high level overview
 
-![App Overview](https://github.com/options-vault/options-vault/blob/dev/options-vault-overview-wide.png)
+![App Overview](https://github.com/options-vault/options-vault/blob/dev/assets/options-vault-overview-wide.png)
 
 ### Two User Types
 
