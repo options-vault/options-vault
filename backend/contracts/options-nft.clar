@@ -21,6 +21,7 @@
 (define-constant ERR_UPDATE_PRICE_FAILED (err u124))
 (define-constant ERR_READING_STXUSD_RATE (err u125))
 (define-constant ERR_NO_OPTION_PNL_AVAILABLE (err u126))
+(define-constant ERR_INIT_AUCTION (err u127))
 
 (define-constant CONTRACT_ADDRESS (as-contract tx-sender))
 (define-data-var contract-owner principal tx-sender)
@@ -82,11 +83,11 @@
 	(let
 		(
 			(timestamp (var-get last-seen-timestamp))
-			(current-cycle-expired (>= timestamp (var-get current-cycle-expiry)))
+			(cycle-expired (>= timestamp (var-get current-cycle-expiry)))
 		)
-		(if current-cycle-expired
+		(if cycle-expired
 				(begin
-					(try! (settle)) ;; Alternative: settle-cycle
+					(try! (settle-cycle)) ;; Alternative: settle-cycle
 					(try! (update-vault-ledger))
 					(try! (init-next-cycle)) ;; Alternative: initialize-auction 
 				)
@@ -103,6 +104,24 @@
 		(try! (contract-call? .vault distribute-pnl))
 		(unwrap! (contract-call? .vault process-deposits) ERR_PROCESS_DEPOSITS)
 		(unwrap! (contract-call? .vault process-withdrawals) ERR_PROCESS_WITHDRAWALS)
+		(ok true)
+	)
+)
+
+;; <init-auction>: Initialize an auction with a normal start time 120min after the last cycle expiry.
+(define-private (init-auction) 
+	(let
+		(
+			(normal-start-time (+ (var-get current-cycle-expiry) (* u120 min-in-milliseconds)))
+			(now (var-get last-seen-timestamp))
+		)
+		(if (< now normal-start-time) 
+			(var-set auction-start-time normal-start-time)	
+			(var-set auction-start-time now)
+		)
+		(var-set auction-applied-decrements u0)
+		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
+		(var-set options-for-sale (/ (contract-call? .vault get-total-balances) stacks-base))
 		(ok true)
 	)
 )
@@ -194,13 +213,13 @@
 		(var-set last-stxusd-rate (get value (element-at (filter is-stx entries) u0))) 
 		(var-set last-seen-timestamp timestamp)		
 
-		(try! (cycle-expiry-check)) ;; TODO: Rename to cycle-expiry-check, check-cycle-expiry, 
+		(try! (cycle-expiry-check))  
 		(ok true)
 	)
 )
 
-;; <settle>: 
-(define-private (settle)
+;; <settle-cycle>: 
+(define-private (settle-cycle)
 	(let
 		(
 			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
@@ -251,8 +270,6 @@
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-milliseconds))
 			(strike (calculate-strike stxusd-rate)) ;; simplified calculation for mvp scope
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
-			(normal-start-time (+ (var-get current-cycle-expiry) (* u120 min-in-milliseconds)))
-			(now (var-get last-seen-timestamp))
 		)
 
 		(map-set options-ledger 
@@ -266,17 +283,12 @@
 		)
 
 		(set-options-price stxusd-rate)
-		(if (< now normal-start-time) 
-			(var-set auction-start-time normal-start-time)	
-			(var-set auction-start-time now)
-		)
-		(var-set auction-applied-decrements u0)
-		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
-		(var-set options-for-sale (/ (contract-call? .vault get-total-balances) stacks-base))
+		(unwrap! (init-auction) ERR_INIT_AUCTION)
 		(var-set current-cycle-expiry next-cycle-expiry)
 		(ok true) 
 	)
 )
+
 
 ;; <mint>: The mint function allows users to purchase options NFTs during a 3 hour auction window. The function receives pricing data from a Redstone oracle and verifies
 ;;         that it was signed by a trusted public key. The function interacts with update-options-price-in-usd which decrements the options-price-in-usd by 2% every 30 minutes.
