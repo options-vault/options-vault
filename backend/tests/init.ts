@@ -96,8 +96,6 @@ export function createTwoDepositorsAndProcess(chain: Chain, accounts: Map<string
   return block
 }
 
-
-
 // Submits price data and only runs test that function was executed properly, not that data was correctly set
 export function submitPriceData(
   chain: Chain,
@@ -219,7 +217,6 @@ export function initFirstAuction(
     return block;
 }
 
-
 // creates a deposits, inits auction, buys 2 nfts, closes auction and initializes claim period
 // 
 export function initAuctionReadyToClaim(chain: Chain, accounts: Map<string, Account>, inTheMoney: bool){
@@ -303,60 +300,6 @@ export function initMint(
     ]);
     return block;
 }
-
-// For test end-current-clycle
-
-const lastTokenId = 5;
-const cycleExpiry = redstoneDataOneMinApart[4].timestamp + 10;
-const srtike = 3000000;
-const trustedOraclePubkey = "0x035ca791fed34bf9e9d54c0ce4b9626e1382cf13daa46aa58b657389c24a751cc6";
-const pricePack = {
-  timestamp: redstoneDataOneMinApart[5].timestamp,
-  prices: [{ symbol: "STXUSD", value: 1 / redstoneDataOneMinApart[5].value }]
-};
-const Signature = types.buff(liteSignatureToStacksSignature(redstoneDataOneMinApart[5].liteEvmSignature));
-
-type presetForEndCurrentCycle = {
-  chain: Chain,
-  accounts: Map<string,Account>,
-  lastTokenId?: Number,
-  currentCycleExpiry?: Number,
-  strike?: Number,
-  optionsMintedAmount?: Number,
-  oraclePubKey?: String,
-  isOracleTrusted?: Boolean,
-  pricePackage?: PricePackage,
-  signature?: String
-}
-
-export function setEnvironmentForEndCurrentCycle({
-  chain,
-  accounts,
-  lastTokenId,
-  currentCycleExpiry = cycleExpiry,
-  strike,
-  optionsMintedAmount,
-  oraclePubKey = trustedOraclePubkey,
-  isOracleTrusted = true,
-  pricePackage = pricePack,
-  signature = Signature
-}: presetForEndCurrentCycle) {
-    const deployer = accounts.get('deployer')!.address;
-    const packageCV = pricePackageToCV(pricePackage);
-    
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        'options-nft',
-        'submit-price-data',
-        [ packageCV.timestamp, packageCV.prices, signature.toString() ],
-        deployer
-      )
-    ])
-
-    return { block, deployer, packageCV, currentCycleExpiry, signature };
-}
-
-
 
 
 
