@@ -25,128 +25,128 @@ const testOptionsUsdPricingMultiplier = 0.02
 const testOutOfTheMoneyStrikePriceMultiplier = 1.15 // 15% above spot
 const testInTheMoneyStrikePriceMultiplier = 0.8 // 20% below spot
 
-// Clarinet.test({
-// 	name: "Ensure that user cannot cash in until date",
-// 	fn(chain: Chain, accounts: Map<string, Account>) {
-// 		const [deployer, wallet_1, wallet_2] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
+Clarinet.test({
+	name: "Ensure that user cannot cash in until date",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, wallet_1, wallet_2] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
 		
-// 		//let block = createTwoDepositorsAndProcess(chain, accounts);
-// 		let block = initAuctionReadyToClaim(chain, accounts, true);
+		//let block = createTwoDepositorsAndProcess(chain, accounts);
+		let block = initAuctionReadyToClaim(chain, accounts, true);
 
-// 		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
+		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
 
-// 		block = chain.mineBlock([
-// 			Tx.contractCall("options-nft", "claim", [types.uint(0),dataForContract.timestamp, dataForContract.price, dataForContract.signature], wallet_1)
-// 		])
+		block = chain.mineBlock([
+			Tx.contractCall("options-nft", "claim", [types.uint(0),dataForContract.timestamp, dataForContract.price, dataForContract.signature], wallet_1)
+		])
 
-// 		block.receipts[0].result.expectErr().expectUint(120)
-// 	}
-// })
+		block.receipts[0].result.expectErr().expectUint(120)
+	}
+})
 
-// Clarinet.test({
-// 	name: "Ensure that another user cannot claim with another user's in the money nft",
-// 	fn(chain: Chain, accounts: Map<string, Account>) {
-// 		const [deployer, wallet_1, wallet_2] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
+Clarinet.test({
+	name: "Ensure that another user cannot claim with another user's in the money nft",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, wallet_1, wallet_2] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
 		
-// 		//let block = createTwoDepositorsAndProcess(chain, accounts);
-// 		let block = initAuctionReadyToClaim(chain, accounts, true);
+		//let block = createTwoDepositorsAndProcess(chain, accounts);
+		let block = initAuctionReadyToClaim(chain, accounts, true);
 
-// 		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
+		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
 
-// 		block = chain.mineBlock([
-// 			Tx.contractCall("options-nft", "claim", [types.uint(1),dataForContract.timestamp, dataForContract.price, dataForContract.signature], wallet_2)
-// 		])
+		block = chain.mineBlock([
+			Tx.contractCall("options-nft", "claim", [types.uint(1),dataForContract.timestamp, dataForContract.price, dataForContract.signature], wallet_2)
+		])
 		
-// 		block.receipts[0].result.expectErr().expectUint(1)
-// 	}
-// })	
+		block.receipts[0].result.expectErr().expectUint(1)
+	}
+})	
 
-// Clarinet.test({
-// 	name: "Ensure that user can claim with in the money nft",
-// 	fn(chain: Chain, accounts: Map<string, Account>) {
-// 		const [deployer, wallet_1, wallet_2] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
+Clarinet.test({
+	name: "Ensure that user can claim with in the money nft",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, wallet_1, wallet_2] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
 		
-// 		//let block = createTwoDepositorsAndProcess(chain, accounts);
-// 		let block = initAuctionReadyToClaim(chain, accounts, true);
+		//let block = createTwoDepositorsAndProcess(chain, accounts);
+		let block = initAuctionReadyToClaim(chain, accounts, true);
 
-// 		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
+		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
 
-// 		block = chain.mineBlock([
-// 			Tx.contractCall("options-nft", "claim", [types.uint(1),dataForContract.timestamp, dataForContract.price, dataForContract.signature], wallet_1)
-// 		])
+		block = chain.mineBlock([
+			Tx.contractCall("options-nft", "claim", [types.uint(1),dataForContract.timestamp, dataForContract.price, dataForContract.signature], wallet_1)
+		])
 		
-// 		block.receipts[0].events.expectSTXTransferEvent(194694, optionsNFTContract, wallet_1);
-// 	}
-// })
+		block.receipts[0].events.expectSTXTransferEvent(194694, optionsNFTContract, wallet_1);
+	}
+})
 
-// Clarinet.test({
-// 	name: "Ensure that user cannot claim with out of the money nft",
-// 	fn(chain: Chain, accounts: Map<string, Account>) {
-// 		const [deployer, wallet_1, wallet_2] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
+Clarinet.test({
+	name: "Ensure that user cannot claim with out of the money nft",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, wallet_1, wallet_2] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
 		
-// 		//let block = createTwoDepositorsAndProcess(chain, accounts);
-// 		let block = initAuctionReadyToClaim(chain, accounts, false);
+		//let block = createTwoDepositorsAndProcess(chain, accounts);
+		let block = initAuctionReadyToClaim(chain, accounts, false);
 
-// 		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
+		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
 
-// 		block = chain.mineBlock([
-// 			Tx.contractCall("options-nft", "claim", [types.uint(2),dataForContract.timestamp, dataForContract.price, dataForContract.signature], wallet_2)
-// 		])
-// 		block.receipts[0].result.expectErr().expectUint(3)
-// 		//block.receipts[0].events
-// 	}
-// })
+		block = chain.mineBlock([
+			Tx.contractCall("options-nft", "claim", [types.uint(2),dataForContract.timestamp, dataForContract.price, dataForContract.signature], wallet_2)
+		])
+		block.receipts[0].result.expectErr().expectUint(3)
+		//block.receipts[0].events
+	}
+})
 
-// Clarinet.test({
-// 	name: "Ensure cannot init next cycle if it is not time yet",
-// 	fn(chain: Chain, accounts: Map<string, Account>) {
-// 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
+Clarinet.test({
+	name: "Ensure cannot init next cycle if it is not time yet",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
 
-// 		let block = initAuctionReadyToClaim(chain, accounts, true)
+		let block = initAuctionReadyToClaim(chain, accounts, true)
 
-// 		// We read the settlement-block-height from the on-chain contract
-// 		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
+		// We read the settlement-block-height from the on-chain contract
+		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
 
-// 		block = chain.mineBlock([
-// 			Tx.contractCall("options-nft", "submit-price-data", [dataForContract.timestamp, dataForContract.price, dataForContract.signature], deployer)
-// 		])
-// 		block.receipts[0].result.expectErr().expectUint(105)
-// 	}
-// })
+		block = chain.mineBlock([
+			Tx.contractCall("options-nft", "submit-price-data", [dataForContract.timestamp, dataForContract.price, dataForContract.signature], deployer)
+		])
+		block.receipts[0].result.expectErr().expectUint(105)
+	}
+})
 
-// Clarinet.test({
-// 	name: "Ensure can init-next-cycle when options are out of the money",
-// 	fn(chain: Chain, accounts: Map<string, Account>) {
-// 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
+Clarinet.test({
+	name: "Ensure can init-next-cycle when options are out of the money",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
 
-// 		let block = initAuctionReadyToClaim(chain, accounts, false)
+		let block = initAuctionReadyToClaim(chain, accounts, false)
 
-// 		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
+		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
 
-// 		block = chain.mineBlock([
-// 			Tx.contractCall("options-nft", "submit-price-data", [dataForContract.timestamp, dataForContract.price, dataForContract.signature], deployer)
-// 		])
-// 		block.receipts[0].result.expectOk().expectBool(true)
-// 	}
-// })
+		block = chain.mineBlock([
+			Tx.contractCall("options-nft", "submit-price-data", [dataForContract.timestamp, dataForContract.price, dataForContract.signature], deployer)
+		])
+		block.receipts[0].result.expectOk().expectBool(true)
+	}
+})
 
-// Clarinet.test({
-// 	name: "Ensure can init-next-cycle including payout pool when options are in the money",
-// 	fn(chain: Chain, accounts: Map<string, Account>) {
-// 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
+Clarinet.test({
+	name: "Ensure can init-next-cycle including payout pool when options are in the money",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
 
-// 		let block = initAuctionReadyToClaim(chain, accounts, true)
+		let block = initAuctionReadyToClaim(chain, accounts, true)
 
-// 		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
-// 		block = chain.mineBlock([])
+		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
+		block = chain.mineBlock([])
 
-// 		block = chain.mineBlock([
-// 			Tx.contractCall("options-nft", "submit-price-data", [dataForContract.timestamp, dataForContract.price, dataForContract.signature], deployer)
-// 		])
-// 		console.log(block.receipts)
+		block = chain.mineBlock([
+			Tx.contractCall("options-nft", "submit-price-data", [dataForContract.timestamp, dataForContract.price, dataForContract.signature], deployer)
+		])
+		console.log(block.receipts)
 
-// 	}
-// })
+	}
+})
 
 // Testing setting trusted oracle
 Clarinet.test({

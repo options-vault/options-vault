@@ -75,9 +75,10 @@
 
 ;; private functions
 
-;; <cycle-control-center>: The function checks if the current cycle is expired and triggers the methods that 
-;;                         end the current and initialize the next cycle.
-(define-private (cycle-control-center) 
+;; <cycle-expiry-check>: The function checks if the current cycle is expired and triggers methods that 
+;;                       settle the options contract, update the vault ledger and initialize the next cycle
+;; end the current and initialize the next cycle.
+(define-private (cycle-expiry-check) 
 	(let
 		(
 			(timestamp (var-get last-seen-timestamp))
@@ -85,9 +86,9 @@
 		)
 		(if current-cycle-expired
 				(begin
-					(try! (end-current-cycle))
+					(try! (settle)) ;; Alternative: settle-cycle
 					(try! (update-vault-ledger))
-					(try! (init-next-cycle))
+					(try! (init-next-cycle)) ;; Alternative: initialize-auction 
 				)
 				true
 		)
@@ -111,7 +112,7 @@
   (is-eq (get symbol entries-list) symbol-stx) 
 )
 
-;; <add-to-options-ledger-list>: Adds a cycle-tuple to the options-ledger-list. Called by end-current-cycle.
+;; <add-to-options-ledger-list>: Adds a cycle-tuple to the options-ledger-list. Called by settle.
 (define-private (add-to-options-ledger-list (cycle-tuple { cycle-expiry: uint, last-token-id: uint}))
   (var-set options-ledger-list (unwrap-panic (as-max-len? (append (var-get options-ledger-list) cycle-tuple) u1000)))
 )
@@ -176,7 +177,7 @@
 ;; public functions
 
 ;; <submit-price-data>: The function receives Redstone data packages from the server and verifies if the data has been signed by
-;;                      a trusted Redstone oracle's public key. The function additionally calls the cycle-control-center function
+;;                      a trusted Redstone oracle's public key. The function additionally calls the cycle-expiry-check function
 ;;                      which can trigger method to transition state to the next cycle.
 (define-public (submit-price-data (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65)))
 	(let 
@@ -193,13 +194,13 @@
 		(var-set last-stxusd-rate (get value (element-at (filter is-stx entries) u0))) 
 		(var-set last-seen-timestamp timestamp)		
 
-		(try! (cycle-control-center))
+		(try! (cycle-expiry-check)) ;; TODO: Rename to cycle-expiry-check, check-cycle-expiry, 
 		(ok true)
 	)
 )
 
-;; <end-current-cycle>: 
-(define-private (end-current-cycle)
+;; <settle>: 
+(define-private (settle)
 	(let
 		(
 			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
@@ -218,12 +219,12 @@
 					(merge
 						settlement-options-ledger-entry
 						{ 
-							option-pnl: (some (usd-to-stx (- stxusd-rate strike) stxusd-rate))
+							option-pnl: (some (usd-to-stx (- stxusd-rate strike) stxusd-rate)) ;; #1: some value
 						}
 					)
 				)
 				;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
-				(try! (contract-call? .vault create-settlement-pool (usd-to-stx (* (- stxusd-rate strike) options-minted-amount) stxusd-rate)))
+				(try! (contract-call? .vault create-settlement-pool (usd-to-stx (* (- stxusd-rate strike) options-minted-amount) stxusd-rate))) ;; #2: total-settlement-pool > 0
 			)
 			;; Option is out-of-the-money, pnl is zero
 			(map-set options-ledger 
