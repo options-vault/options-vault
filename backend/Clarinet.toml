@@ -1,32 +1,28 @@
 [project]
-name = "backend"
+name = 'backend'
+description = ''
 authors = []
-description = ""
 telemetry = false
+cache_dir = '.cache'
 requirements = []
-boot_contracts = ["pox", "costs-v2", "bns"]
-
-[project.cache_location]
-path = ".requirements"
 
 [contracts.options-nft]
-path = "contracts/options-nft.clar"
+path = 'contracts/options-nft.clar'
+clarity_version = 1
 
 [contracts.redstone-verify]
-path = "contracts/redstone-verify.clar"
+path = 'contracts/redstone-verify.clar'
+clarity_version = 1
 
 [contracts.traits]
-path = "contracts/traits.clar"
+path = 'contracts/traits.clar'
+clarity_version = 1
 
 [contracts.vault]
-path = "contracts/vault.clar"
-
-[repl]
-costs_version = 2
-parser_version = 2
-
+path = 'contracts/vault.clar'
+clarity_version = 1
 [repl.analysis]
-passes = ["check_checker"]
+passes = ['check_checker']
 
 [repl.analysis.check_checker]
 strict = false

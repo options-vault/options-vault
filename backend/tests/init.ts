@@ -42,12 +42,12 @@ export type RedstoneData = {
 };
 
 export type PriceDataForContract = {
-    timestamp: string,
-    price: string,
-    signature: string
-
+  timestamp: string,
+  price: string,
+  signature: string
 }
 
+// Converts Redstone data package into data format that can be consumed by Clarinet
 export function convertRedstoneToContractData(redstoneDataPoint : RedstoneData): PriceDataForContract{
   const pricePackage: PricePackage = {
     timestamp: redstoneDataPoint.timestamp,
@@ -57,7 +57,7 @@ export function convertRedstoneToContractData(redstoneDataPoint : RedstoneData):
   const packageCV = pricePackageToCV(pricePackage)
   const returnSig = types.buff(liteSignatureToStacksSignature(redstoneDataPoint.liteEvmSignature))
 
-  return{
+  return {
     timestamp: packageCV.timestamp,
     price: packageCV.prices,
     signature: returnSig
@@ -95,8 +95,6 @@ export function createTwoDepositorsAndProcess(chain: Chain, accounts: Map<string
   ]);
   return block
 }
-
-
 
 // Submits price data and only runs test that function was executed properly, not that data was correctly set
 export function submitPriceData(
@@ -219,45 +217,43 @@ export function initFirstAuction(
     return block;
 }
 
-
-// creates a deposits, inits auction, buys 2 nfts, closes auction and initializes claim period
-// 
-export function initAuctionReadyToClaim(chain: Chain, accounts: Map<string, Account>, inTheMoney: bool){
+// Creates an auction that deposits, inits auction, buys 2 nfts, closes auction and initializes claim period
+export function initAuctionReadyToClaim(chain: Chain, accounts: Map<string, Account>, inTheMoney: boolean){
   const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 	
-			let block = createTwoDepositorsAndProcess(chain, accounts)
-			const totalBalances = chain.callReadOnlyFn(
-				"vault",
-				"get-total-balances",
-				[],
-				deployer.address
-			)
-			assertEquals(totalBalances.result, types.uint(3000000))
-	
-			// Initialize the first auction; the strike price is in-the-money (below spot)
-			block = initFirstAuction(
-				chain, 
-				deployer.address,
-				testAuctionStartTime, 
-				testCycleExpiry,  
-				inTheMoney ? testInTheMoneyStrikePriceMultiplier : testOutOfTheMoneyStrikePriceMultiplier, 
-				redstoneDataOneMinApart
-			);
-			assertEquals(block.receipts.length, 5);
-	
-			// Mint two option NFTs
-			block = initMint(
-				chain, 
-				accountA.address, 
-				accountB.address, 
-				redstoneDataOneMinApart
-			)
-			assertEquals(block.receipts.length, 2);
-			
-			// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger the end-current-cycle method
-			block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
-			block.receipts[0].result.expectOk().expectBool(true);
-      return block;
+  let block = createTwoDepositorsAndProcess(chain, accounts)
+  const totalBalances = chain.callReadOnlyFn(
+    "vault",
+    "get-total-balances",
+    [],
+    deployer.address
+  )
+  assertEquals(totalBalances.result, types.uint(3000000))
+
+  // Initialize the first auction; the strike price is in-the-money (below spot)
+  block = initFirstAuction(
+    chain, 
+    deployer.address,
+    testAuctionStartTime, 
+    testCycleExpiry,  
+    inTheMoney ? testInTheMoneyStrikePriceMultiplier : testOutOfTheMoneyStrikePriceMultiplier, 
+    redstoneDataOneMinApart
+  );
+  assertEquals(block.receipts.length, 5);
+
+  // Mint two option NFTs
+  block = initMint(
+    chain, 
+    accountA.address, 
+    accountB.address, 
+    redstoneDataOneMinApart
+  )
+  assertEquals(block.receipts.length, 2);
+  
+  // Submit price data with a timestamp slightly after the current-cycle-expiry to trigger the end-current-cycle method
+  block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+  block.receipts[0].result.expectOk().expectBool(true);
+  return block;
 }
 
 export function initMint(
@@ -303,60 +299,6 @@ export function initMint(
     ]);
     return block;
 }
-
-// For test end-current-clycle
-
-const lastTokenId = 5;
-const cycleExpiry = redstoneDataOneMinApart[4].timestamp + 10;
-const srtike = 3000000;
-const trustedOraclePubkey = "0x035ca791fed34bf9e9d54c0ce4b9626e1382cf13daa46aa58b657389c24a751cc6";
-const pricePack = {
-  timestamp: redstoneDataOneMinApart[5].timestamp,
-  prices: [{ symbol: "STXUSD", value: 1 / redstoneDataOneMinApart[5].value }]
-};
-const Signature = types.buff(liteSignatureToStacksSignature(redstoneDataOneMinApart[5].liteEvmSignature));
-
-type presetForEndCurrentCycle = {
-  chain: Chain,
-  accounts: Map<string,Account>,
-  lastTokenId?: Number,
-  currentCycleExpiry?: Number,
-  strike?: Number,
-  optionsMintedAmount?: Number,
-  oraclePubKey?: String,
-  isOracleTrusted?: Boolean,
-  pricePackage?: PricePackage,
-  signature?: String
-}
-
-export function setEnvironmentForEndCurrentCycle({
-  chain,
-  accounts,
-  lastTokenId,
-  currentCycleExpiry = cycleExpiry,
-  strike,
-  optionsMintedAmount,
-  oraclePubKey = trustedOraclePubkey,
-  isOracleTrusted = true,
-  pricePackage = pricePack,
-  signature = Signature
-}: presetForEndCurrentCycle) {
-    const deployer = accounts.get('deployer')!.address;
-    const packageCV = pricePackageToCV(pricePackage);
-    
-    let block = chain.mineBlock([
-      Tx.contractCall(
-        'options-nft',
-        'submit-price-data',
-        [ packageCV.timestamp, packageCV.prices, signature.toString() ],
-        deployer
-      )
-    ])
-
-    return { block, deployer, packageCV, currentCycleExpiry, signature };
-}
-
-
 
 
 
