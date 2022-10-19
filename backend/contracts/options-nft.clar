@@ -28,7 +28,6 @@
 (define-non-fungible-token options-nft uint)
 (define-data-var token-id-nonce uint u0)
 
-
 (define-constant symbol-stx 0x535458) ;; "STX" as a buff
 (define-constant stacks-base u1000000)
 ;; A map of all trusted oracles, indexed by their 33 byte compressed public key.
@@ -77,7 +76,7 @@
 ;; private functions
 
 ;; <cycle-control-center>: The function checks if the current cycle is expired and triggers the methods that 
-;;												 end the current and initialize the next cycle.
+;;                         end the current and initialize the next cycle.
 (define-private (cycle-control-center) 
 	(let
 		(
@@ -96,8 +95,8 @@
 	)
 )
 
-;; <update-vault-ledger>: The function is called at the end of a cycle to update the vault `ledger` 
-;;												to represents the `option-pnl` as well as the intra-cycle deposits and withdrawals.
+;; <update-vault-ledger>: The function is called at the end of a cycle to update the vault ledger 
+;;                        to represents the `option-pnl` as well as the intra-cycle deposits and withdrawals.
 (define-private (update-vault-ledger) 
 	(begin 
 		(try! (contract-call? .vault distribute-pnl))
@@ -118,23 +117,23 @@
 )
 
 ;; <set-options-price>: The price is determined using a simplified calculation that sets options price at 0.5% of the stxusd price. If all 52 weekly options
-;;										  for a year would expiry worthless, a uncompounded 26% APY would be achieved by this pricing strategy. In the next iteration we intend
-;;										  to replace this simplified calculation with the Black Scholes formula - the industry standard for pricing European style options.
+;;                      for a year would expiry worthless, a uncompounded 26% APY would be achieved by this pricing strategy. In the next iteration we intend
+;;                      to replace this simplified calculation with the Black Scholes formula - the industry standard for pricing European style options.
 (define-private (set-options-price (stxusd-rate uint)) 
 	(var-set options-price-in-usd (some (/ stxusd-rate u200)))
 )
 
 ;; <calculate-strike>: A simple calculation to set the strike price 15% higher than the current price of the underlying asset In the next iteration we intend to
-;;										 replace this simplified calculation with a calculation that takes more variables (i.e. volatility) into account. Since the begin of the auction
-;;										 is somewhat variable (there is a small chance that it starts later than normal-start-time) it would help risk-management to make the calculate-strike
-;;										 and/or the set-optons-price functions dependent on the time-to-expiry, which would allow to more accurately price the option's time value.
+;;                     replace this simplified calculation with a calculation that takes more variables (i.e. volatility) into account. Since the begin of the auction
+;;                     is somewhat variable (there is a small chance that it starts later than normal-start-time) it would help risk-management to make the calculate-strike
+;;                     and/or the set-optons-price functions dependent on the time-to-expiry, which would allow to more accurately price the option's time value.
 (define-private (calculate-strike (stxusd-rate uint))
 	(/ (* stxusd-rate u115) u100)
 )
 
 ;; <update-options-price-in-usd>: The function decrements the options-price-in-usd by 2% every 30 minutes. 
-;;																The expected-decrements are calculated and compared to the applied-decrements. 
-;;																If they are higher, the necessary decrement is applied to the options-price-in-usd.
+;;                                The expected-decrements are calculated and compared to the applied-decrements. 
+;;                                If they are higher, the necessary decrement is applied to the options-price-in-usd.
 (define-private (update-options-price-in-usd (timestamp uint)) 
 	(let
 		(
@@ -176,9 +175,9 @@
 
 ;; public functions
 
-;;<submit-price-data>: The function receives Redstone data packages from the server and verifies if the data has been signed by
-;;										 a trusted Redstone oracle's public key. The function additionally calls the cycle-control-center function
-;;										 which can trigger method to transition state to the next cycle.
+;; <submit-price-data>: The function receives Redstone data packages from the server and verifies if the data has been signed by
+;;                      a trusted Redstone oracle's public key. The function additionally calls the cycle-control-center function
+;;                      which can trigger method to transition state to the next cycle.
 (define-public (submit-price-data (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65)))
 	(let 
 		(
@@ -199,7 +198,7 @@
 	)
 )
 
-;;<end-current-cycle>: 
+;; <end-current-cycle>: 
 (define-private (end-current-cycle)
 	(let
 		(
@@ -279,8 +278,8 @@
 )
 
 ;; <mint>: The mint function allows users to purchase options NFTs during a 3 hour auction window. The function receives pricing data from a Redstone oracle and verifies
-;;  			 that it was signed by a trusted public key. The function interacts with update-options-price-in-usd which decrements the options-price-in-usd by 2% every 30 minutes.
-;;				 The options NFT is priced in USD, but the sale is settled in STX - get-update-latest-price-in-stx handles the conversion.
+;;         that it was signed by a trusted public key. The function interacts with update-options-price-in-usd which decrements the options-price-in-usd by 2% every 30 minutes.
+;;         The options NFT is priced in USD, but the sale is settled in STX - get-update-latest-price-in-stx handles the conversion.
 (define-public (mint (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65)))
 	(let
 		(
@@ -318,7 +317,7 @@
 ;; SETTLEMENT
 
 ;; #[allow(unchecked_data)] 
-(define-public (claim (token-id uint) (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65))) ;; claim
+(define-public (claim (token-id uint) (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65)))
   (let
     (
       (recipient tx-sender)
