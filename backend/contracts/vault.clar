@@ -9,6 +9,8 @@
 (define-constant ERR_ONLY_CONTRACT_ALLOWED (err u104))
 (define-constant ERR_TX_NOT_APPLIED_YET (err u105))
 (define-constant ERR_PREMIUM_NOT_SPLITTED_CORRECTLY (err u106))
+(define-constant ERR_SETTLEMENT_POOL_NOT_ENOUGH (err u107))
+(define-constant ERR_INSUFFICIENT_CONTRACT_FUNDS (err u108))
 
 ;; Ledger map to store balances and withdraw/deposit requests for each principal (investor type / vault)
 (define-map ledger principal { address: principal, balance: uint, pending-deposits: uint, pending-withdrawal: uint })
@@ -241,7 +243,7 @@
     (var-set temp-total-balances (var-get total-balances))
     (map pnl-evaluator (var-get investor-addresses))
     ;; TODO: Understand if double-check works
-    (asserts! (is-eq (var-get total-balances) (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits))) ERR_PREMIUM_NOT_SPLITTED_CORRECTLY)
+    (asserts! (is-eq (var-get total-balances) (- (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits)) (var-get total-settlement-pool))) ERR_PREMIUM_NOT_SPLITTED_CORRECTLY)
     (ok true)
   )
 )
@@ -291,6 +293,10 @@
   (var-get total-pending-deposits)
 )
 
+(define-read-only (get-settlement-pool) 
+  (var-get total-settlement-pool)
+)
+
 
 ;; <create-settlement-pool>: The function transfers the STX amount owed to the cycle's NFT holders to the options-nft contract,
 ;;                           effectively creating a settlement-pool. It is called by the options-nft contract as part of the logic
@@ -310,6 +316,8 @@
   (begin
     ;; (asserts! (is-eq contract-caller ) (err thrown)) ;; TODO: create variable that holds principal of options-nft contract for comparison
     (asserts! (> amount u0) ERR_INVALID_AMOUNT)
+    (asserts! (>= (var-get total-settlement-pool) amount) ERR_SETTLEMENT_POOL_NOT_ENOUGH)
+    (asserts! (>= (stx-get-balance CONTRACT_ADDRESS) amount) ERR_INSUFFICIENT_CONTRACT_FUNDS)
     (try! (as-contract (stx-transfer? amount tx-sender recipient)))
     (var-set total-settlement-pool (- (var-get total-settlement-pool) amount))
     (ok true)
