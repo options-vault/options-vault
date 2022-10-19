@@ -63,42 +63,50 @@
 (define-data-var options-price-in-usd (optional uint) none)
 (define-data-var options-for-sale uint u0)
 
-;; TODO: Write init-first-cycle where this is set to true and set it to false by default
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; TODO: Check units for all STX transactions (mint, settlement), priced in USD but settled in STX
-;; --> Should the option be priced in STX to the end user? (like on Deribit)
+;; TODO: Write init-first-cycle where this is set to true and set it to false by default
 ;; TODO: Add fail-safe public function that allows contract-owner to manually initalize AND end the next cycle. 
-;; TODO: Instead of passing timestamp from receiver functions to later functions, get the timestamp from last-seen-timestamp
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; private functions
 
-;; <cycle-expiry-check>: The function checks if the current cycle is expired and triggers methods that 
-;;                       settle the options contract, update the vault ledger and initialize the next cycle
-;; end the current and initialize the next cycle.
-(define-private (cycle-expiry-check) 
-	(let
+;; <init-next-cycle>: 
+(define-private (init-next-cycle) 
+	(let 
 		(
-			(timestamp (var-get last-seen-timestamp))
-			(cycle-expired (>= timestamp (var-get current-cycle-expiry)))
+			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
+			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-milliseconds))
+			(strike (calculate-strike stxusd-rate)) ;; simplified calculation for mvp scope
+			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
 		)
-		(if cycle-expired
-				(begin
-					(try! (settle-cycle)) ;; Alternative: settle-cycle
-					(try! (update-vault-ledger))
-					(try! (init-next-cycle)) ;; Alternative: initialize-auction 
-				)
-				true
+		;; Determine the value of the expired options NFT (pnl) and if ITM, create a settlement-pool for payouts to NFT holders
+		(try! (settle-cycle)) 
+		;; Update the vault ledger distributing all pnl to vault depositors and processing all intra-week deposits and withdrawals
+		(try! (update-vault-ledger))
+
+		;; Create an options-ledger entry for the upcoming/next cycle
+		(map-set options-ledger 
+			{ cycle-expiry: next-cycle-expiry } 
+			{
+				strike: strike, 
+				first-token-id: first-token-id, 
+				last-token-id: first-token-id,
+				option-pnl: none
+			}
 		)
-		(ok true)
+		;; Initialize the auction for the next cycle
+		(unwrap! (init-auction) ERR_INIT_AUCTION)
+		;; Change the contract internal clock (represented by the var current-cycle-expiry) to the next cycle's expiry date
+		;; A new cycle has begun
+		(var-set current-cycle-expiry next-cycle-expiry)
+		(ok true) 
 	)
 )
 
 ;; <update-vault-ledger>: The function is called at the end of a cycle to update the vault ledger 
-;;                        to represents the `option-pnl` as well as the intra-cycle deposits and withdrawals.
+;;                        to represents the option-pnl as well as the intra-cycle deposits and withdrawals.
 (define-private (update-vault-ledger) 
 	(begin 
 		(try! (contract-call? .vault distribute-pnl))
@@ -112,9 +120,11 @@
 (define-private (init-auction) 
 	(let
 		(
+			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
 			(normal-start-time (+ (var-get current-cycle-expiry) (* u120 min-in-milliseconds)))
 			(now (var-get last-seen-timestamp))
 		)
+		(set-options-price stxusd-rate)
 		(if (< now normal-start-time) 
 			(var-set auction-start-time normal-start-time)	
 			(var-set auction-start-time now)
@@ -203,6 +213,9 @@
 		(
 			;; Recover the pubkey of the signer.
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
+			;; Check if the cycle is epxired.
+			(cycle-expired (>= timestamp (var-get current-cycle-expiry)))
+
 		)
 		;; Check if the signer is a trusted oracle.
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
@@ -210,10 +223,15 @@
 		(asserts! (> timestamp (get-last-block-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than the last block timestamp.
 		(asserts! (>= timestamp (var-get last-seen-timestamp)) ERR_STALE_RATE) ;; timestamp should be larger than or equal to the last seen timestamp.
 
+		;; Set the contract variables last-stxusd-rate and last-seen-timestamp to the newly provided values
 		(var-set last-stxusd-rate (get value (element-at (filter is-stx entries) u0))) 
 		(var-set last-seen-timestamp timestamp)		
 
-		(try! (cycle-expiry-check))  
+		(if cycle-expired
+			(try! (init-next-cycle))
+			true
+		)
+
 		(ok true)
 	)
 )
@@ -261,35 +279,6 @@
 	) 
 )
 
-;; INITIALIZE NEXT CYCLE
-;; <init-next-cycle>: 
-(define-private (init-next-cycle) 
-	(let 
-		(
-			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
-			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-milliseconds))
-			(strike (calculate-strike stxusd-rate)) ;; simplified calculation for mvp scope
-			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
-		)
-
-		(map-set options-ledger 
-			{ cycle-expiry: next-cycle-expiry } 
-			{ 
-				strike: strike, 
-				first-token-id: first-token-id, 
-				last-token-id: first-token-id,
-				option-pnl: none
-			}
-		)
-
-		(set-options-price stxusd-rate)
-		(unwrap! (init-auction) ERR_INIT_AUCTION)
-		(var-set current-cycle-expiry next-cycle-expiry)
-		(ok true) 
-	)
-)
-
-
 ;; <mint>: The mint function allows users to purchase options NFTs during a 3 hour auction window. The function receives pricing data from a Redstone oracle and verifies
 ;;         that it was signed by a trusted public key. The function interacts with update-options-price-in-usd which decrements the options-price-in-usd by 2% every 30 minutes.
 ;;         The options NFT is priced in USD, but the sale is settled in STX - get-update-latest-price-in-stx handles the conversion.
@@ -327,8 +316,7 @@
 	)
 )
 
-;; SETTLEMENT
-
+;; <claim>: 
 ;; #[allow(unchecked_data)] 
 (define-public (claim (token-id uint) (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65)))
   (let
