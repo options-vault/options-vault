@@ -1,4 +1,4 @@
-import { Clarinet, Tx, Chain, Account, types } from 'https://deno.land/x/clarinet@v1.0.2/index.ts';
+import { Clarinet, Tx, Chain, Account, types } from 'https://deno.land/x/clarinet@v1.0.4/index.ts';
 import { assert, assertEquals } from 'https://deno.land/std@0.90.0/testing/asserts.ts';
 import { createTwoDepositorsAndProcess, submitPriceData, initFirstAuction, redstoneDataOneMinApart } from "./init.ts"
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
@@ -181,39 +181,6 @@ Clarinet.test({
         block.receipts[0].result.expectErr().expectUint(errorCodes.ERR_INVALID_AMOUNT)
 }})
 
-
-Clarinet.test({
-    name: "Ensure that distribute pnl can only be called during the right time",
-    fn(chain: Chain, accounts: Map<string, Account>) {
-		const wallet_1 = accounts.get('wallet_1')!.address;
-
-        let block = chain.mineBlock([
-            Tx.contractCall("vault", "distribute-pnl", [ types.bool(true) ], wallet_1),
-        ])
-
-        // console.log(block.receipts[0])
-
-        // ERR TX NOT APPLIED YET
-        block.receipts[0].result.expectErr().expectUint(errorCodes.ERR_TX_NOT_APPLIED_YET);
-    }
-})
-
-Clarinet.test({
-    name: "Ensure that distribute pnl can only be called during the right time",
-    fn(chain: Chain, accounts: Map<string, Account>) {
-		const wallet_1 = accounts.get('wallet_1')!.address;
-
-        let block = chain.mineBlock([
-            Tx.contractCall("vault", "distribute-pnl", [ types.bool(true) ], wallet_1),
-        ])
-
-        // console.log(block.receipts[0])
-
-        // ERR TX NOT APPLIED YET
-        block.receipts[0].result.expectErr().expectUint(errorCodes.ERR_TX_NOT_APPLIED_YET);
-    }
-})
-
 Clarinet.test({
     name: "Ensure that distribute-pnl function adds the correct yield to each investor's balance if the pnl is 0",
     fn(chain: Chain, accounts: Map<string, Account>) {
@@ -246,7 +213,7 @@ Clarinet.test({
             Tx.contractCall(
                 "vault", 
                 "distribute-pnl",
-                [ types.bool(false) ], 
+                [], 
                 deployer
             )
         ])
@@ -308,19 +275,16 @@ Clarinet.test({
             Tx.contractCall(
                 'vault',
                 'create-settlement-pool',
-                [ types.uint(300000), types.principal(optionsNft)],
+                [ types.uint(300000) ],
                 deployer
             )
         ])
-
-        // checks if the create-settlement-pool works
-        block.receipts[3].events.expectSTXTransferEvent(300000, vault, optionsNft);
 
         block = chain.mineBlock([
             Tx.contractCall(
                 "vault", 
                 "distribute-pnl",
-                [ types.bool(false) ], 
+                [], 
                 deployer
             )
         ])
@@ -382,19 +346,16 @@ Clarinet.test({
             Tx.contractCall(
                 'vault',
                 'create-settlement-pool',
-                [ types.uint(700000), types.principal(optionsNft)],
+                [ types.uint(700000) ],
                 deployer
             )
         ])
-
-        // checks if the create-settlement-pool works
-        block.receipts[3].events.expectSTXTransferEvent(700000, vault, optionsNft);
 
         block = chain.mineBlock([
             Tx.contractCall(
                 "vault", 
                 "distribute-pnl",
-                [ types.bool(false) ], 
+                [], 
                 deployer
             )
         ])
@@ -423,11 +384,9 @@ Clarinet.test({
 })
 
 Clarinet.test({
-    name: "Ensure that create-settlement-pool function transfers an amount form vault to options-nft contract",
+    name: "Ensure that create-settlement-pool function sets the amount sent to total-settlement-pool var",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
-        const vault = `${deployer}.vault`;
-        const optionsNft = `${deployer}.options-nft`;
 
 		let block = createTwoDepositorsAndProcess(chain, accounts);
 
@@ -435,13 +394,17 @@ Clarinet.test({
             Tx.contractCall(
                 'vault',
                 'create-settlement-pool',
-                [ types.uint(500000), types.principal(optionsNft)],
+                [ types.uint(500000) ],
                 deployer
             )
         ])
-
         // checks if the create-settlement-pool works
-        block.receipts[0].events.expectSTXTransferEvent(500000, vault, optionsNft);
+        chain.callReadOnlyFn(
+            "vault", 
+            "get-settlement-pool", 
+            [], 
+            deployer
+        ).result.expectUint(500000);
     }
 })
 
@@ -452,8 +415,6 @@ Clarinet.test({
         const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
         const wallet_3 = accounts.get('wallet_3')!.address;
-        const vault = `${deployer}.vault`;
-        const optionsNft = `${deployer}.options-nft`;
 
         let block = createTwoDepositorsAndProcess(chain, accounts);
 
@@ -479,7 +440,7 @@ Clarinet.test({
             Tx.contractCall(
                 'vault',
                 'create-settlement-pool',
-                [ types.uint(700000), types.principal(optionsNft)],
+                [ types.uint(700000) ],
                 deployer
             )
         ])
@@ -494,7 +455,7 @@ Clarinet.test({
             Tx.contractCall(
                 "vault", 
                 "distribute-pnl",
-                [ types.bool(false) ], 
+                [], 
                 deployer
             ),
             Tx.contractCall(
@@ -540,7 +501,7 @@ Clarinet.test({
             Tx.contractCall(
                 'vault',
                 'create-settlement-pool',
-                [ types.uint(0), types.principal(optionsNft)],
+                [ types.uint(0) ],
                 deployer
             )
         ])
@@ -597,7 +558,6 @@ Clarinet.test({
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
-        const vault = `${deployer}.vault`;
 
         let block = chain.mineBlock([
             Tx.contractCall(
@@ -610,6 +570,123 @@ Clarinet.test({
 
         // checks if the deposit-premium function works
         block.receipts[0].result.expectErr().expectUint(errorCodes.ERR_INVALID_AMOUNT);
+    }
+});
+
+Clarinet.test({
+    name: "Ensure that the vault transfers settlement amount to the user requested",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
+        const wallet_1 = accounts.get('wallet_1')!.address;
+        const vault = `${deployer}.vault`;
+
+        let block = createTwoDepositorsAndProcess(chain, accounts);
+
+        block = chain.mineBlock([
+            Tx.contractCall(
+                'vault',
+                'create-settlement-pool',
+                [ types.uint(1000000) ],
+                deployer
+            ),
+            Tx.contractCall(
+                'vault',
+                'claim-settlement',
+                [ types.uint(500000), types.principal(wallet_1) ],
+                deployer
+            )
+        ])
+
+        chain.callReadOnlyFn(
+            "vault", 
+            "get-settlement-pool", 
+            [], 
+            deployer
+        ).result.expectUint(500000);
+
+        // checks if the claim was successfuly made
+        block.receipts[1].events.expectSTXTransferEvent(500000, vault, wallet_1);
+    }
+});
+
+Clarinet.test({
+    name: "Ensure that the vault crashes when trying to transfer settlement amount to the user requested if there is not enough balance in the vault",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
+        const wallet_1 = accounts.get('wallet_1')!.address;
+        const vault = `${deployer}.vault`;
+
+        let block = chain.mineBlock([
+            Tx.contractCall(
+                'vault',
+                'create-settlement-pool',
+                [ types.uint(1000000) ],
+                deployer
+            ),
+            Tx.contractCall(
+                'vault',
+                'claim-settlement',
+                [ types.uint(500000), types.principal(wallet_1) ],
+                deployer
+            )
+        ])
+
+        // checks if the claim crashes
+        block.receipts[1].result.expectErr().expectUint(108);
+    }
+});
+
+Clarinet.test({
+    name: "Ensure that the vault crashes when trying to transfer settlement amount to the user requested if there is not enough balance in the settlement-pool",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
+        const wallet_1 = accounts.get('wallet_1')!.address;
+        const vault = `${deployer}.vault`;
+
+        let block = chain.mineBlock([
+            Tx.contractCall(
+                'vault',
+                'create-settlement-pool',
+                [ types.uint(1000000) ],
+                deployer
+            ),
+            Tx.contractCall(
+                'vault',
+                'claim-settlement',
+                [ types.uint(5000000), types.principal(wallet_1) ],
+                deployer
+            )
+        ])
+        
+        // checks if the claim crashes
+        block.receipts[1].result.expectErr().expectUint(107);
+    }
+});
+
+Clarinet.test({
+    name: "Ensure that claim function from vault just work with valid amounts",
+    fn(chain: Chain, accounts: Map<string, Account>) {
+        const deployer = accounts.get('deployer')!.address;
+        const wallet_1 = accounts.get('wallet_1')!.address;
+        const vault = `${deployer}.vault`;
+
+        let block = chain.mineBlock([
+            Tx.contractCall(
+                'vault',
+                'create-settlement-pool',
+                [ types.uint(1000000) ],
+                deployer
+            ),
+            Tx.contractCall(
+                'vault',
+                'claim-settlement',
+                [ types.uint(0), types.principal(wallet_1) ],
+                deployer
+            )
+        ])
+        
+        // checks if the claim crashes
+        block.receipts[1].result.expectErr().expectUint(100);
     }
 });
 // Test deposit-premium
