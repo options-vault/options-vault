@@ -22,6 +22,7 @@
 (define-constant ERR_READING_STXUSD_RATE (err u125))
 (define-constant ERR_NO_OPTION_PNL_AVAILABLE (err u126))
 
+(define-constant CONTRACT_ADDRESS (as-contract tx-sender))
 (define-data-var contract-owner principal tx-sender)
 
 (define-non-fungible-token options-nft uint)
@@ -62,8 +63,6 @@
 (define-data-var options-price-in-usd (optional uint) none)
 (define-data-var options-for-sale uint u0)
 
-(define-data-var settlement-broadcast-block-height uint u0) 
-(define-data-var settlement-pool-created bool false) 
 ;; TODO: Write init-first-cycle where this is set to true and set it to false by default
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -85,20 +84,11 @@
 			(timestamp (var-get last-seen-timestamp))
 			(current-cycle-expired (>= timestamp (var-get current-cycle-expiry)))
 		)
-		(if (and
-			current-cycle-expired
-			(not (var-get settlement-pool-created))
-			)
-				(try! (end-current-cycle)) 
-				true
-		)
-		(if (and 
-			current-cycle-expired 
-			(> block-height (var-get settlement-broadcast-block-height)) 
-			) 
+		(if current-cycle-expired
 				(begin
+					(try! (end-current-cycle))
 					(try! (update-vault-ledger))
-					(unwrap! (init-next-cycle) ERR_CYCLE_INIT_FAILED) ;; TODO: why is try! not possible here?
+					(try! (init-next-cycle))
 				)
 				true
 		)
@@ -110,7 +100,7 @@
 ;;												to represents the `option-pnl` as well as the intra-cycle deposits and withdrawals.
 (define-private (update-vault-ledger) 
 	(begin 
-		(try! (contract-call? .vault distribute-pnl (var-get settlement-pool-created)))
+		(try! (contract-call? .vault distribute-pnl))
 		(unwrap! (contract-call? .vault process-deposits) ERR_PROCESS_DEPOSITS)
 		(unwrap! (contract-call? .vault process-withdrawals) ERR_PROCESS_WITHDRAWALS)
 		(ok true)
@@ -234,9 +224,7 @@
 					)
 				)
 				;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
-				(try! (contract-call? .vault create-settlement-pool (usd-to-stx (* (- stxusd-rate strike) options-minted-amount) stxusd-rate) (as-contract tx-sender)))
-				(var-set settlement-pool-created true)
-				(var-set settlement-broadcast-block-height block-height)
+				(try! (contract-call? .vault create-settlement-pool (usd-to-stx (* (- stxusd-rate strike) options-minted-amount) stxusd-rate)))
 			)
 			;; Option is out-of-the-money, pnl is zero
 			(map-set options-ledger 
@@ -285,7 +273,6 @@
 		(var-set auction-applied-decrements u0)
 		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
 		(var-set options-for-sale (/ (contract-call? .vault get-total-balances) stacks-base))
-		(var-set settlement-pool-created false)
 		(var-set current-cycle-expiry next-cycle-expiry)
 		(ok true) 
 	)
@@ -353,8 +340,8 @@
 			(begin
 				;; Transfer options NFT to settlement contract
 				(try! (transfer token-id tx-sender (as-contract tx-sender)))
-				;; Transfer STX out of th settlement pool to tx-sender
-				(try! (as-contract (stx-transfer? option-pnl tx-sender recipient)))
+				;; Transfer STX out of th settlement pool in the vault contract to recipient
+				(try! (contract-call? .vault claim-settlement option-pnl recipient))
 			)
 			true
 		)
@@ -543,19 +530,6 @@
 
 (define-read-only (get-options-for-sale) 
 	(var-get options-for-sale)
-)
-
-;; settlement-broadcast-block-height
-;; #[allow(unchecked_data)]
-(define-public (set-settlement-broadcast-block-height (height uint)) 
-	(begin
-		(asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_CONTRACT_OWNER)
-		(ok (var-set settlement-broadcast-block-height height))
-	)	
-)
-
-(define-read-only (get-settlement-broadcast-block-height) 
-	(var-get settlement-broadcast-block-height)
 )
 
 ;; options-ledger-list

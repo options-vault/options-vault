@@ -20,7 +20,7 @@
 
 (define-data-var total-pending-deposits uint u0)
 
-(define-data-var settlement-broadcast-block-height uint u0)
+(define-data-var total-settlement-pool uint u0)
 
 ;; Balance helper functions
 (define-read-only (get-ledger-entry (investor principal))
@@ -234,27 +234,14 @@
 ;; PNL FUNCTIONS
 
 ;;<distribute-pnl>: The function distributes the cycle's profit and loss (pnl) to the investor's in the ledger on a pro-rata basis.
-(define-public (distribute-pnl (settlement-tx-confirmed bool))
+(define-public (distribute-pnl)
   (begin
-    ;; ;; (asserts! (is-eq CONTRACT_ADDRESS tx-sender) ONLY_CONTRACT_ALLOWED)
-    (if settlement-tx-confirmed
-      (begin
-        ;; to handle edge case where the settlement transaction was broadcast but was not mined in the first block
-        (asserts! 
-          (not (is-eq 
-            (stx-get-balance CONTRACT_ADDRESS)
-            (at-block (unwrap-panic (get-block-info? id-header-hash (var-get settlement-broadcast-block-height))) (stx-get-balance CONTRACT_ADDRESS))
-            ;; (- (var-get temp-total-balances) (var-get total-pending-deposits))
-          ))
-          ERR_TX_NOT_APPLIED_YET
-        )
-      )
-      true
-    )
     ;; TODO: Add assert that the function can only called by the options-nft contract
+    ;; (asserts! (is-eq CONTRACT_ADDRESS tx-sender) ONLY_CONTRACT_ALLOWED)
     (var-set temp-total-balances (var-get total-balances))
     (map pnl-evaluator (var-get investor-addresses))
-    ;; (asserts! (is-eq (var-get total-balances) (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits))) PREMIUM_NOT_SPLITTED_CORRECTLY)
+    ;; TODO: Understand if double-check works
+    (asserts! (is-eq (var-get total-balances) (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits))) ERR_PREMIUM_NOT_SPLITTED_CORRECTLY)
     (ok true)
   )
 )
@@ -265,7 +252,7 @@
   (let  (
           (total-balance (var-get total-balances))
           (temp-total-balance (var-get temp-total-balances))
-          (vault-balance (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits))) 
+          (vault-balance (- (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits)) (var-get total-settlement-pool))) 
           (investor-info (unwrap-panic (map-get? ledger investor)))
           (investor-balance (get balance investor-info))
           (investor-new-balance (/ (* investor-balance vault-balance) temp-total-balance))
@@ -305,15 +292,26 @@
 )
 
 
-;; <create-settlement-pool>: The function transfers the STX amount owed to the cycle's NFT holders to the `options-nft` contract,
-;;                           effectively creating a settlement-pool. It is called by the `options-nft` contract as part of the logic
-;;                           for `determine-value-and-settle` and only executes in case of an in-the-money options NFT.
+;; <create-settlement-pool>: The function transfers the STX amount owed to the cycle's NFT holders to the options-nft contract,
+;;                           effectively creating a settlement-pool. It is called by the options-nft contract as part of the logic
+;;                           for determine-value-and-settle and only executes in case of an in-the-money options NFT.
 ;; #[allow(unchecked_data)]
-(define-public (create-settlement-pool (amount uint) (settlement-contract principal))
+(define-public (create-settlement-pool (amount uint))
   (begin
+    ;; (asserts! (is-eq contract-caller ) (err thrown)) ;; TODO: create variable that holds principal of options-nft contract for comparison
     (asserts! (> amount u0) ERR_INVALID_AMOUNT)
-    (var-set settlement-broadcast-block-height block-height)
-    (try! (as-contract (stx-transfer? amount tx-sender settlement-contract)))
+    (var-set total-settlement-pool (+ (var-get total-settlement-pool) amount))
+    (ok true)
+  )
+)
+
+;; #[allow(unchecked_data)]
+(define-public (claim-settlement (amount uint) (recipient principal)) 
+  (begin
+    ;; (asserts! (is-eq contract-caller ) (err thrown)) ;; TODO: create variable that holds principal of options-nft contract for comparison
+    (asserts! (> amount u0) ERR_INVALID_AMOUNT)
+    (try! (as-contract (stx-transfer? amount tx-sender recipient)))
+    (var-set total-settlement-pool (- (var-get total-settlement-pool) amount))
     (ok true)
   )
 )
