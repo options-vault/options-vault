@@ -43,9 +43,8 @@
 
 ;; The unix timestamp of the expiry date of the current cycle
 (define-data-var current-cycle-expiry uint u1666368000000) ;; set to Fri Oct 21 2022 16:00:00 GMT+0000
+
 ;; A map that holds the relevant data points for each batch of options issued by the contract
-;; TODO: Remove total-pnl (can be computed from remaining data points)
-;; TODO: Add price-in-usd? Since auction can have multiple prices do we need to store start and end price, average price? (NOTE: all transactions can be viewed and analyzed on chain)
 (define-map options-ledger 
 	{ cycle-expiry: uint } 
 	{ 
@@ -60,8 +59,9 @@
 
 (define-data-var options-price-in-usd (optional uint) none)
 (define-data-var options-for-sale uint u0)
-(define-data-var auction-start-time uint u0) ;; TODO: Since this is set to the cycle beginning (previous cycle-expiry) this variable is no longer needed
+(define-data-var auction-start-time uint u0)
 (define-data-var auction-decrement-value uint u0)
+(define-data-var auction-applied-decrements uint u0)
 
 (define-data-var settlement-broadcast-block-height uint u0) 
 (define-data-var settlement-tx-in-mempool bool false) ;; TODO: Write init-first-cycle where this is set to true and set it to false by default
@@ -69,21 +69,16 @@
 (define-constant week-in-milliseconds u604800000)
 (define-constant min-in-milliseconds u60000)
 
-(define-data-var times-decrement-applied uint u0)
-
-;; TODO: 
-
 ;; TODO: Check units for all STX transactions (mint, settlement), priced in USD but settled in STX
 ;; --> Should the option be priced in STX to the end user? (like on Deribit)
 
 ;; TODO: Add fail-safe public function that allows contract-owner to manually initalize AND end the next cycle. 
-;; TODO: Add functions to set start-init-window and end-init-window
 ;; TODO: Instead of passing timestamp from receiver functions to later functions, get the timestamp from last-seen-timestamp
 
 ;;<submit-price-data>: The function receives Redstone data packages from the server and verifies if the data has been signed by
 ;;										 a trusted Redstone oracle's public key. The function additionally contains a time-based control flow that
 ;; 										 can trigger end-currrent-cycle, update-ledger and init-next-cycle
-;; TODO: implement helper function that abstracts away recover-signer contract call and is-trusted-oracle assert 
+;; TODO: Abstract out the control flow logic into a seperate function cycle-control-center 
 ;; #[allow(unchecked_data)]
 (define-public (submit-price-data (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65)))
 	(let 
@@ -123,6 +118,8 @@
 	)
 )
 
+;; <update-vault-ledger>: The function is called at the end of a cycle to update the vault `ledger` 
+;;												to represents the `option-pnl` as well as the intra-cycle deposits and withdrawals.
 (define-private (update-vault-ledger) 
 	(begin 
 		(try! (contract-call? .vault distribute-pnl (var-get settlement-tx-in-mempool)))
@@ -141,7 +138,8 @@
 )
 
 ;; END CURRENT CYCLE
-
+;; Consolidate end-current-cycle and determine-value-and-settle
+;;<end-current-cycle>: 
 (define-private (end-current-cycle)
 	(let
 		(
@@ -159,7 +157,7 @@
 )
 
 ;; INITIALIZE NEXT CYCLE
-
+;; <init-next-cycle>: 
 (define-private (init-next-cycle) 
 	(let 
 		(
@@ -186,7 +184,7 @@
 			(var-set auction-start-time normal-start-time)	
 			(var-set auction-start-time now)
 		)
-		(var-set times-decrement-applied u0)
+		(var-set auction-applied-decrements u0)
 		(var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)) ;; each decrement represents 2% of the start price
 		(var-set options-for-sale (/ (contract-call? .vault get-total-balances) stacks-base))
 		(var-set settlement-tx-in-mempool false)
@@ -200,7 +198,7 @@
   (var-set options-ledger-list (unwrap-panic (as-max-len? (append (var-get options-ledger-list) cycle-tuple) u1000)))
 )
 
-;; TODO: Split determine-value and settle into two seperate functions
+;; <determine-value-and-settle>:
 (define-private (determine-value-and-settle)
 	(let
 		(
@@ -242,23 +240,25 @@
 	)
 )
 
-
+;; <set-options-price>: The price is determined using a simplified calculation that sets options price at 0.5% of the stxusd price. If all 52 weekly options
+;;										  for a year would expiry worthless, a uncompounded 26% APY would be achieved by this pricing strategy. In the next iteration we intend
+;;										  to replace this simplified calculation with the Black Scholes formula - the industry standard for pricing European style options.
 (define-private (set-options-price (stxusd-rate uint)) 
-	;; The price is determined using a simplified calculation that sets options price as 0.5% of the stxusd price
-	;; If all 52 weekly options for a year would expiry worthless, a uncompounded 26% APY would be achieved by this pricing strategy
-	;; In the next iteration we intend to replace this simplified calculation with the Black Scholes formula - the industry standard for pricing European style options
 	(var-set options-price-in-usd (some (/ stxusd-rate u200)))
 )
 
+;; <calculate-strike>: A simple calculation to set the strike price 15% higher than the current price of the underlying asset In the next iteration we intend to
+;;										 replace this simplified calculation with a calculation that takes more variables (i.e. volatility) into account. Since the begin of the auction
+;;										 is somewhat variable (there is a small chance that it starts later than normal-start-time) it would help risk-management to make the calculate-strike
+;;										 and/or the set-optons-price functions dependent on the time-to-expiry, which would allow to more accurately price the option's time value.
 (define-private (calculate-strike (stxusd-rate uint))
-	;; A simple calculation to set the strike price 15% higher than the current price of the underlying asset
-	;; In the next iteration we intend to replace this simplified calculation with a calculation that takes more variables (i.e. volatility) into account
-	;; Since the begin of the auction is somewhat variable (there is a small chance that it starts later than normal-start-time) it would help risk-management
-	;; to make the calculate-strike and/or the set-optons-price functions dependent on the time-to-expiry, which would allow to more accurately price the option's time value.
 	(/ (* stxusd-rate u115) u100)
 )
-;; NFT MINTING (Priced in USD, payed in STX)
 
+;; NFT MINTING (Priced in USD, payed in STX)
+;; <mint>: The mint function allows users to purchase options NFTs during a 3 hour auction window. The function receives pricing data from a Redstone oracle and verifies
+;;  			 that it was signed by a trusted public key. The function interacts with update-options-price-in-usd which decrements the options-price-in-usd by 2% every 30 minutes.
+;;				 
 ;; #[allow(unchecked_data)]
 (define-public (mint (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65)))
 	(let
@@ -269,8 +269,7 @@
 			(stxusd-rate (unwrap! (get value (element-at (filter is-stx entries) u0)) ERR_RETRIEVING_STXUSD)) ;; had to take out the filter to pass test
 		)
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
-		;; Check if an options-nft is available for sale. 
-		;; The contract can only sell as many options-nfts as there are funds in the vault
+		;; Check if an options-nft is available for sale. The contract can only sell as many options-nfts as there are funds in the vault
 		(asserts! (> (var-get options-for-sale) u0) ERR_OPTIONS_SOLD_OUT)
 		;; Check if auciton has run for more than 180 minutes, this ensures that the auction never runs longer than 3 hours thus reducing delta risk
 		;; (i.e. the risk of a unfavorable change in the price of the underlying asset)
@@ -294,28 +293,27 @@
 		(ok token-id)
 	)
 )
-;; TODO IMPORTANT: Add logic that makes it so the price gets only decremented once every 30 min
-;; The logic needs to check if the decrement has already been applied, this can be achieved by introducing
-;; a global auction-decrement-counter variable that increases every time a decrement is applied and is set to zero by init-next-cycle
+
+;; <update-options-price-in-usd>: The function decrements the options-price-in-usd by 2% every 30 minutes. 
+;;																The expected-decrements are calculated and compared to the applied-decrements. 
+;;																If they are higher, the necessary decrement is applied to the options-price-in-usd.
 (define-private (update-options-price-in-usd (timestamp uint)) 
 	(let
 		(
-			(decrement (* (/ (- timestamp (var-get auction-start-time)) (* min-in-milliseconds u30)) (var-get auction-decrement-value)))
-			(time-for-next-update (+ (var-get auction-start-time) (* (* min-in-milliseconds u30) (if (> (var-get times-decrement-applied) u0) (var-get times-decrement-applied) u1))))
+			(expected-decrements (/ (- timestamp (var-get auction-start-time)) (* min-in-milliseconds u30)))
+			(applied-decrements (var-get auction-applied-decrements))
 		)
-		(if (and 
-					(>= timestamp time-for-next-update)
-					(>= u5 (var-get times-decrement-applied))
-				)
-				(begin 
-					(var-set options-price-in-usd (some (- (unwrap-panic (var-get options-price-in-usd)) decrement)))
-					(var-set times-decrement-applied (+ (var-get times-decrement-applied) u1))
-				)
-				true
+		(if (> expected-decrements applied-decrements)
+			(begin 
+				(var-set options-price-in-usd (some (- (unwrap-panic (var-get options-price-in-usd)) (* (- expected-decrements applied-decrements) (var-get auction-decrement-value)))))
+				(var-set auction-applied-decrements (+ (var-get auction-applied-decrements) u1))
+			)
+			true
 		)
 		(ok true)
 	)
 )
+
 
 ;; SETTLEMENT
 
