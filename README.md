@@ -100,7 +100,9 @@ Intra-week deposits and withdrawals are kept seperate from the vault `balance` a
 
 ### Detailed description of the functions in the `options-nft` contract
 
-[ADD IMAGE THAT SHOWS CYCLE BUT WITH FUNCTION NAMES EXECUTED FOR EACH BLOCK]
+TODO [ADD IMAGE THAT SHOWS CYCLE BUT WITH FUNCTION NAMES EXECUTED FOR EACH BLOCK]
+
+TODO (Split into public and prive functions)
 
 **:star2: _`submit-price-data`_**
 
