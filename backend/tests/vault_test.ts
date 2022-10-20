@@ -1,6 +1,6 @@
 import { Clarinet, Tx, Chain, Account, types } from 'https://deno.land/x/clarinet@v1.0.4/index.ts';
 import { assert, assertEquals } from 'https://deno.land/std@0.90.0/testing/asserts.ts';
-import { createTwoDepositorsAndProcess, submitPriceData, initFirstAuction, redstoneDataOneMinApart } from "./init.ts"
+import { simulateTwoDepositsAndProcess, submitPriceData, initFirstAuction, redstoneDataOneMinApart } from "./init.ts"
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
 import { testConfig } from './init.ts';
 
@@ -20,7 +20,7 @@ Clarinet.test({
         const deployer = accounts.get('deployer')!.address;
 		const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
-        let block = createTwoDepositorsAndProcess(chain, accounts)
+        let block = simulateTwoDepositsAndProcess(chain, accounts)
 
         block.receipts[0].events.expectSTXTransferEvent(1000000, wallet_1, vaultContract)
         block.receipts[1].events.expectSTXTransferEvent(2000000, wallet_2, vaultContract)
@@ -36,7 +36,7 @@ Clarinet.test({
     fn(chain: Chain, accounts: Map<string, Account>) {
 		const wallet_3 = accounts.get('wallet_3')!.address;
 
-        let block = createTwoDepositorsAndProcess(chain, accounts)
+        let block = simulateTwoDepositsAndProcess(chain, accounts)
 
         block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_3),
@@ -51,7 +51,7 @@ Clarinet.test({
     fn(chain: Chain, accounts: Map<string, Account>) {
 		const wallet_1 = accounts.get('wallet_1')!.address;
 
-        let block = createTwoDepositorsAndProcess(chain, accounts)
+        let block = simulateTwoDepositsAndProcess(chain, accounts)
 
         block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
@@ -65,7 +65,7 @@ Clarinet.test({
     fn(chain: Chain, accounts: Map<string, Account>) {
 		const wallet_2 = accounts.get('wallet_2')!.address;
 
-        let block = createTwoDepositorsAndProcess(chain, accounts)
+        let block = simulateTwoDepositsAndProcess(chain, accounts)
 
         block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
@@ -78,7 +78,7 @@ Clarinet.test({
     fn(chain: Chain, accounts: Map<string, Account>) {
 		const wallet_2 = accounts.get('wallet_2')!.address;
 
-        let block = createTwoDepositorsAndProcess(chain, accounts)
+        let block = simulateTwoDepositsAndProcess(chain, accounts)
 
         block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(2000001)], wallet_2),
@@ -95,7 +95,7 @@ Clarinet.test({
     name: "Ensure that pending withdrawals are actualised correctly",
     fn(chain: Chain, accounts: Map<string, Account>) {
 		const wallet_1 = accounts.get('wallet_1')!.address;
-        let block = createTwoDepositorsAndProcess(chain, accounts)
+        let block = simulateTwoDepositsAndProcess(chain, accounts)
 
         block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
@@ -111,7 +111,7 @@ Clarinet.test({
 		const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
 
-        let block = createTwoDepositorsAndProcess(chain, accounts)
+        let block = simulateTwoDepositsAndProcess(chain, accounts)
 
         // expect wallet 1 has 1 stack, wallet 2 has 2 in ledger
         chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_1) ], wallet_1).result.expectSome().expectUint(1000000);
@@ -126,7 +126,7 @@ Clarinet.test({
         const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
 
-        let block = createTwoDepositorsAndProcess(chain, accounts);
+        let block = simulateTwoDepositsAndProcess(chain, accounts);
 
         block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [ types.uint(1000000) ], wallet_1),
@@ -147,7 +147,7 @@ Clarinet.test({
         const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
 
-        let block = createTwoDepositorsAndProcess(chain, accounts)
+        let block = simulateTwoDepositsAndProcess(chain, accounts)
 
         block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
@@ -189,7 +189,7 @@ Clarinet.test({
 		const wallet_2 = accounts.get('wallet_2')!.address;
         const wallet_3 = accounts.get('wallet_3')!.address;
 
-        let block = createTwoDepositorsAndProcess(chain, accounts);
+        let block = simulateTwoDepositsAndProcess(chain, accounts);
 
         block = chain.mineBlock([
             Tx.contractCall(
@@ -251,7 +251,7 @@ Clarinet.test({
         const vault = `${deployer}.vault`;
         const optionsNft = `${deployer}.options-nft`;
 
-        let block = createTwoDepositorsAndProcess(chain, accounts);
+        let block = simulateTwoDepositsAndProcess(chain, accounts);
 
         block = chain.mineBlock([
             Tx.contractCall(
@@ -322,7 +322,7 @@ Clarinet.test({
         const vault = `${deployer}.vault`;
         const optionsNft = `${deployer}.options-nft`;
 
-        let block = createTwoDepositorsAndProcess(chain, accounts);
+        let block = simulateTwoDepositsAndProcess(chain, accounts);
 
         block = chain.mineBlock([
             Tx.contractCall(
@@ -388,7 +388,7 @@ Clarinet.test({
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
 
-		let block = createTwoDepositorsAndProcess(chain, accounts);
+		let block = simulateTwoDepositsAndProcess(chain, accounts);
 
         block = chain.mineBlock([
             Tx.contractCall(
@@ -416,7 +416,7 @@ Clarinet.test({
 		const wallet_2 = accounts.get('wallet_2')!.address;
         const wallet_3 = accounts.get('wallet_3')!.address;
 
-        let block = createTwoDepositorsAndProcess(chain, accounts);
+        let block = simulateTwoDepositsAndProcess(chain, accounts);
 
         block = chain.mineBlock([
             Tx.contractCall(
@@ -495,7 +495,7 @@ Clarinet.test({
         const deployer = accounts.get('deployer')!.address;
         const optionsNft = `${deployer}.options-nft`;
 
-		let block = createTwoDepositorsAndProcess(chain, accounts);
+		let block = simulateTwoDepositsAndProcess(chain, accounts);
 
         block = chain.mineBlock([
             Tx.contractCall(
@@ -580,7 +580,7 @@ Clarinet.test({
         const wallet_1 = accounts.get('wallet_1')!.address;
         const vault = `${deployer}.vault`;
 
-        let block = createTwoDepositorsAndProcess(chain, accounts);
+        let block = simulateTwoDepositsAndProcess(chain, accounts);
 
         block = chain.mineBlock([
             Tx.contractCall(

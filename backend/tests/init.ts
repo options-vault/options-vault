@@ -16,6 +16,9 @@ const testOptionsUsdPricingMultiplier = 0.02
 const testOutOfTheMoneyStrikePriceMultiplier = 1.15 // 15% above spot
 const testInTheMoneyStrikePriceMultiplier = 0.8 // 20% below spot
 
+const trustedOraclePubkey = "0x035ca791fed34bf9e9d54c0ce4b9626e1382cf13daa46aa58b657389c24a751cc6";
+const untrustedOraclePubkey = "0x03cd2cfdbd2ad9332828a7a13ef62cb999e063421c708e863a7ffed71fb61c88c9";
+
 export const testConfig = {
   firstRedstoneTimestamp, midRedstoneTimestamp, lastRedstoneTimestamp, testAuctionStartTime, testCycleExpiry, testOptionsForSale, testOptionsUsdPricingMultiplier, testOutOfTheMoneyStrikePriceMultiplier, testInTheMoneyStrikePriceMultiplier
 }
@@ -70,9 +73,9 @@ export function setTrustedOracle(chain: Chain, senderAddress: string): Block {
 	]);
 }
 
-// TODO Rename to simulateTwoDeposits
+
 // Creates two depositors for wallet_1 (1 STX) and wallet_2 (2 STX)
-export function createTwoDepositors(chain: Chain, accounts: Map<string, Account>) {
+export function simulateTwoDeposits(chain: Chain, accounts: Map<string, Account>) {
   const wallet_1 = accounts.get('wallet_1')!.address;
   const wallet_2 = accounts.get('wallet_2')!.address;
 
@@ -83,10 +86,9 @@ export function createTwoDepositors(chain: Chain, accounts: Map<string, Account>
   return block
 }
 
-// TODO Rename to simulateTwoDepositsAndProcess
 // Creates two depositors for wallet_1 (1 STX) and wallet_2 (2 STX) 
 // and processes the deposits so that the ledger moves it from pending-deposits to balance
-export function createTwoDepositorsAndProcess(chain: Chain, accounts: Map<string, Account>) {
+export function simulateTwoDepositsAndProcess(chain: Chain, accounts: Map<string, Account>) {
   const wallet_1 = accounts.get('wallet_1')!.address;
   const wallet_2 = accounts.get('wallet_2')!.address;
 
@@ -104,22 +106,17 @@ export function submitPriceData(
   submitterAddress: string,
   redstoneDataPoint: RedstoneData): Block 
   {
-    const pricePackage: PricePackage = {
-      timestamp: redstoneDataPoint.timestamp,
-      prices: [{ symbol: "STX", value: redstoneDataPoint.value }]
-    }
 
-    const packageCV = pricePackageToCV(pricePackage)
-    const signature = types.buff(liteSignatureToStacksSignature(redstoneDataPoint.liteEvmSignature))
+    const { timestamp, price, signature } = convertRedstoneToContractData(redstoneDataPoint)
 
     let block = chain.mineBlock([
 			Tx.contractCall(
 				"options-nft", 
 				"submit-price-data", 
 				[
-					packageCV.timestamp,
-					packageCV.prices,
-					signature
+					timestamp,
+          price,
+          signature
 				], 
 				submitterAddress
 			),
@@ -176,7 +173,7 @@ export function submitPriceDataAndTest(
 }
 
 // Sets current-cycle-expiry to the provided timestamp
-export function setCurrCycleExpiry(
+export function setCurrentCycleExpiry(
   chain: Chain,
   deployerAddress: string,
   cycleExpiry: number,
@@ -200,10 +197,12 @@ export function initFirstAuction(
   deployerAddress: string,
   auctionStart: number, 
   cycleExpiry: number, // TODO: Pull cycleExpiry into another init function - setCycleExpiry
-  strikeMultiplier: number, 
+  inTheMoney: string, 
   redstoneData: RedstoneData[]
   ): Block {
 
+    const strikeMultiplier = inTheMoney == 'inTheMoney' ? testInTheMoneyStrikePriceMultiplier : testOutOfTheMoneyStrikePriceMultiplier
+   
     let block = chain.mineBlock([
       // sets current-cycle-expiry to the provided timestamp
       Tx.contractCall(
@@ -242,49 +241,6 @@ export function initFirstAuction(
       ),
     ]);
     return block;
-}
-
-// Creates an auction that deposits, inits auction, buys 2 nfts, closes auction and initializes claim period
-export function initAuctionReadyToClaim(
-  chain: Chain, 
-  accounts: Map<string, Account>, 
-  inTheMoney: boolean
-  ){
-  const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
-	
-  let block = createTwoDepositorsAndProcess(chain, accounts)
-  const totalBalances = chain.callReadOnlyFn(
-    "vault",
-    "get-total-balances",
-    [],
-    deployer.address
-  )
-  assertEquals(totalBalances.result, types.uint(3000000))
-
-  // Initialize the first auction; the strike price is in-the-money (below spot)
-  block = initFirstAuction(
-    chain, 
-    deployer.address,
-    testAuctionStartTime, 
-    testCycleExpiry,  
-    inTheMoney ? testInTheMoneyStrikePriceMultiplier : testOutOfTheMoneyStrikePriceMultiplier, 
-    redstoneDataOneMinApart
-  );
-  assertEquals(block.receipts.length, 5);
-
-  // Mint two option NFTs
-  block = initMint(
-    chain, 
-    accountA.address, 
-    accountB.address, 
-    redstoneDataOneMinApart
-  )
-  assertEquals(block.receipts.length, 2);
-  
-  // Submit price data with a timestamp slightly after the current-cycle-expiry to trigger the end-current-cycle method
-  block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
-  block.receipts[0].result.expectOk().expectBool(true);
-  return block;
 }
 
 export function initMint(
@@ -331,5 +287,46 @@ export function initMint(
     return block;
 }
 
+// TODO: Take out submitPriceData
+// Creates an auction that deposits, inits auction, buys 2 nfts, closes auction and initializes claim period
+export function simulateFirstCycleTillExpiry(
+  chain: Chain, 
+  accounts: Map<string, Account>, 
+  inTheMoney: string
+  ){
+  const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+	
+  let block = simulateTwoDepositsAndProcess(chain, accounts)
+  const totalBalances = chain.callReadOnlyFn(
+    "vault",
+    "get-total-balances",
+    [],
+    deployer.address
+  )
+  assertEquals(totalBalances.result, types.uint(3000000))
 
+  // Initialize the first auction; the strike price is in-the-money (below spot)
+  block = initFirstAuction(
+    chain, 
+    deployer.address,
+    testAuctionStartTime, 
+    testCycleExpiry,  
+    inTheMoney, 
+    redstoneDataOneMinApart
+  );
+  assertEquals(block.receipts.length, 5);
 
+  // Mint two option NFTs
+  block = initMint(
+    chain, 
+    accountA.address, 
+    accountB.address, 
+    redstoneDataOneMinApart
+  )
+  assertEquals(block.receipts.length, 2);
+  
+  // Submit price data with a timestamp slightly after the current-cycle-expiry to trigger the end-current-cycle method
+  block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+  block.receipts[0].result.expectOk().expectBool(true);
+  return block;
+}
