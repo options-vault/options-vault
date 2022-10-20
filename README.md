@@ -29,7 +29,7 @@ Stacks is in a unique position to become the smart contracting layer for Bitcoin
 
 ### Two User Types
 
-- **User 1 (Saver/Investor)**: Deposits STX into the vaul to generate income via the covered call strategy
+- **User 1 (Yield Investor)**: Deposits STX into the vaul to generate income via the covered call strategy
 - **User 2 (Speculator)**: Buys call option on STX to profit from price appreciation
 
 ### Simplified User Flow
