@@ -66,8 +66,11 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; TODO: Write init-first-cycle where this is set to true and set it to false by default
+;; TODO: Transition these TODOs to issues on Github
+
+;; TODO: Write init-first-cycle method
 ;; TODO: Add fail-safe public function that allows contract-owner to manually initalize AND end the next cycle. 
+;; TODO: Add fail safe public function that allows contract-owner to manually end an auction --> needs to introduce a mint-open flag 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -89,8 +92,7 @@
 		(try! (update-options-ledger next-cycle-expiry))
 		;; Initialize the auction for the next cycle
 		(unwrap! (init-auction) ERR_INIT_AUCTION)
-		;; Change the contract internal clock (represented by the var current-cycle-expiry) to the next cycle's expiry date
-		;; A new cycle has begun
+		;; Change the contract's internal clock (represented by the var current-cycle-expiry) to the next cycle's expiry date: a new cycle has begun
 		(var-set current-cycle-expiry next-cycle-expiry)
 		(ok true) 
 	)
