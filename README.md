@@ -100,6 +100,8 @@ Intra-week deposits and withdrawals are kept seperate from the vault `balance` a
 
 ### Detailed description of the functions in the `options-nft` contract
 
+[ADD IMAGE THAT SHOWS CYCLE BUT WITH FUNCTION NAMES EXECUTED FOR EACH BLOCK]
+
 **:star2: _`submit-price-data`_**
 
 The function receives Redstone data packages from the server and verifies if the data has been signed by a trusted Redstone oracle's public key. The function additionally contains a time-based control flow that can trigger `end-currrent-cycle`, `update-ledger` and `init-next-cycle` based on when in the cycle it is called. The first time price and time data gets submitted _after_ `current-cycle-expiry`, end-current-cycle gets executed with `determine-value-and-settle` containing the majority of the business logic. If the cycle's options NFT is in-the-money a `settlement-pool` gets created. In this case the control flow in `submit-price-data` waits until _after_ the settlement transaction has been mined before executing `update-vault-ledger` and `init-next-cycle`.
