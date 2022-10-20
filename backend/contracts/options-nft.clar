@@ -72,8 +72,8 @@
 
 ;; private functions
 
-;; <init-next-cycle>: 
-(define-private (init-next-cycle) ;; TODO: Rename to cycle-transition or transition-cycle or transition or transition-to-next-cycle
+;; <shift-to-next-cycle>: 
+(define-private (shift-to-next-cycle)
 	(let
 		(
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-milliseconds))
@@ -163,7 +163,6 @@
 		(ok true)
 	)
 )
-
 
 ;; <set-options-ledger>: 
 (define-private (update-options-ledger (next-cycle-expiry uint)) 
@@ -299,7 +298,7 @@
 		(var-set last-seen-timestamp timestamp)		
 
 		(if cycle-expired
-			(try! (init-next-cycle))
+			(try! (shift-to-next-cycle))
 			true
 		)
 
