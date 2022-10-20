@@ -40,7 +40,8 @@
 (define-data-var last-stxusd-rate (optional uint) none)
 
 ;; The unix millisecond timestamp of the expiry date of the current cycle
-(define-data-var current-cycle-expiry uint u1666368000000) ;; set to Fri Oct 21 2022 16:00:00 GMT+0000
+;; TODO: Rename to cycle-expiry
+(define-data-var current-cycle-expiry uint u1666368000000) ;; set to Fri Oct 21 2022 16:00:00 GMT+0000 
 (define-constant week-in-milliseconds u604800000)
 (define-constant min-in-milliseconds u60000)
 
@@ -65,64 +66,63 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; TODO: Write init-first-cycle where this is set to true and set it to false by default
+;; TODO: Transition these TODOs to issues on Github
+
+;; TODO: Write init-first-cycle method
 ;; TODO: Add fail-safe public function that allows contract-owner to manually initalize AND end the next cycle. 
+;; TODO: Add fail safe public function that allows contract-owner to manually end an auction --> needs to introduce a mint-open flag 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; private functions
 
-;; <init-next-cycle>: 
-(define-private (init-next-cycle) 
+;; <transition-to-next-cycle>: 
+(define-private (transition-to-next-cycle)
 	(let
 		(
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-milliseconds))
 		) 
-		;; Determine the value of the expired options NFT (pnl) and if ITM, create a settlement-pool for payouts to NFT holders
-		(try! (settle-cycle)) 
+		;; Determine the value of the expired options NFT (pnl)
+		(try! (determine-value)) 
+		;; Create a settlement-pool for payouts to holders of in-the-money options NFTs
+		(try! (create-settlement-pool))
 		;; Update the vault ledger distributing pnl to vault depositors and processing intra-week deposits and withdrawals
 		(try! (update-vault-ledger))
 		;; Create an options-ledger entry for the next cycle
 		(try! (update-options-ledger next-cycle-expiry))
 		;; Initialize the auction for the next cycle
 		(unwrap! (init-auction) ERR_INIT_AUCTION)
-		;; Change the contract internal clock (represented by the var current-cycle-expiry) to the next cycle's expiry date
-		;; A new cycle has begun
+		;; Change the contract's internal clock (represented by the var current-cycle-expiry) to the next cycle's expiry date: a new cycle has begun
 		(var-set current-cycle-expiry next-cycle-expiry)
 		(ok true) 
 	)
 )
 
-;; <settle-cycle>: 
-(define-private (settle-cycle)
+;; <determine-value>: 
+(define-private (determine-value) 
 	(let
 		(
-			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
-			(settlement-expiry (var-get current-cycle-expiry))
-	  	(settlement-options-ledger-entry (try! (get-options-ledger-entry settlement-expiry)))
-    	(strike (get strike settlement-options-ledger-entry))
-			(options-minted-amount (+ (- (get last-token-id settlement-options-ledger-entry) (get first-token-id settlement-options-ledger-entry)) u1))
+			(settlement-cycle-expiry (var-get current-cycle-expiry))
+	  	(settlement-options-ledger-entry (try! (get-options-ledger-entry settlement-cycle-expiry)))
+    	(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
+			(strike (get strike settlement-options-ledger-entry))
 			(last-token-id (var-get token-id-nonce))
-			(cycle-tuple { cycle-expiry: settlement-expiry, last-token-id: last-token-id })
-		) 
+			(cycle-tuple { cycle-expiry: settlement-cycle-expiry, last-token-id: last-token-id })
+		)
 		(if (> stxusd-rate strike) 
 			;; Option is in-the-money, pnl is positive
-			(begin
-				(map-set options-ledger 
-					{ cycle-expiry: settlement-expiry } 
-					(merge
-						settlement-options-ledger-entry
-						{ 
-							option-pnl: (some (usd-to-stx (- stxusd-rate strike) stxusd-rate)) ;; #1: some value
-						}
-					)
+			(map-set options-ledger 
+				{ cycle-expiry: settlement-cycle-expiry } 
+				(merge
+					settlement-options-ledger-entry
+					{ 
+						option-pnl: (some (usd-to-stx (- stxusd-rate strike) stxusd-rate)) ;; #1: some value
+					}
 				)
-				;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
-				(try! (contract-call? .vault create-settlement-pool (usd-to-stx (* (- stxusd-rate strike) options-minted-amount) stxusd-rate))) ;; #2: total-settlement-pool > 0
 			)
 			;; Option is out-of-the-money, pnl is zero
 			(map-set options-ledger 
-				{ cycle-expiry: settlement-expiry } 
+				{ cycle-expiry: settlement-cycle-expiry } 
 				(merge
 					settlement-options-ledger-entry
 					{ 
@@ -131,9 +131,29 @@
 				)
 			)
 		)
+		;; Add to options-ledger-list so that the claim function can iterate over all past cycles 
 		(add-to-options-ledger-list cycle-tuple)
 		(ok true)
-	) 
+	)
+)
+
+;; <crete-settlement-pool>: 
+(define-private (create-settlement-pool) 
+	(let
+		(
+			(settlement-cycle-expiry (var-get current-cycle-expiry))
+	  	(settlement-options-ledger-entry (try! (get-options-ledger-entry settlement-cycle-expiry)))
+			(option-pnl (unwrap-panic (get option-pnl settlement-options-ledger-entry)))
+			(options-minted-amount (+ (- (get last-token-id settlement-options-ledger-entry) (get first-token-id settlement-options-ledger-entry)) u1))
+			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
+		)
+		(if (> option-pnl u0) 
+			;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
+			(try! (contract-call? .vault create-settlement-pool (usd-to-stx (* option-pnl options-minted-amount) stxusd-rate))) ;; #2: total-settlement-pool > 0 
+			true
+		)
+		(ok true)
+	)
 )
 
 ;; <update-vault-ledger>: The function is called at the end of a cycle to update the vault ledger 
@@ -146,7 +166,6 @@
 		(ok true)
 	)
 )
-
 
 ;; <set-options-ledger>: 
 (define-private (update-options-ledger (next-cycle-expiry uint)) 
@@ -170,7 +189,7 @@
 	)
 )
 
-;; <init-auction>: Initialize an auction with a normal start time 120min after the last cycle expiry.
+;; <init-auction>: Initialize an auction with a normal start time 120 min after the last cycle expiry.
 (define-private (init-auction) 
 	(let
 		(
@@ -282,7 +301,7 @@
 		(var-set last-seen-timestamp timestamp)		
 
 		(if cycle-expired
-			(try! (init-next-cycle))
+			(try! (transition-to-next-cycle))
 			true
 		)
 
