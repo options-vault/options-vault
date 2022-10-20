@@ -325,8 +325,5 @@ export function simulateFirstCycleTillExpiry(
   )
   assertEquals(block.receipts.length, 2);
   
-  // Submit price data with a timestamp slightly after the current-cycle-expiry to trigger the end-current-cycle method
-  block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
-  block.receipts[0].result.expectOk().expectBool(true);
   return block;
 }

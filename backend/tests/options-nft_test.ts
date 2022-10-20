@@ -230,9 +230,9 @@ Clarinet.test({
 	},
 });
 
-// Test end-current-cycle function for an out-of-the-money option
+// Test transition-to-next-cycle function for an out-of-the-money option
 Clarinet.test({
-	name: "Ensure that the end-current-cycle function works for an out-of-the-money option",
+	name: "Ensure that the transition-to-next-cycle function works for an out-of-the-money option",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 		
@@ -246,17 +246,7 @@ Clarinet.test({
 		);
 		assertEquals(block.receipts.length, 5);
 
-		// Manually set the settlement-block-height to current block-height + 2 so that the second if statement
-		// in submit-price-data is not triggered which allows us to isolate the end-current-cycle function for testing
-		block = chain.mineBlock([
-			Tx.contractCall(
-				"options-nft", 
-				"set-settlement-block-height", 
-				[types.uint(block.height + 2)], 
-				deployer.address
-				)
-		]);
-
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger the end-current-cycle method
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
 		block.receipts[0].result.expectOk().expectBool(true);
 
@@ -312,9 +302,6 @@ Clarinet.test({
 		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger the end-current-cycle method
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
 		block.receipts[0].result.expectOk().expectBool(true);
-		// Since the option was in-the-money, we expect a settlement tx that sends all STX
-		// owed to NFT holders from the vaultContract to the optionsNFTContract
-		block.receipts[0].events.expectSTXTransferEvent(389389, vaultContract, optionsNFTContract)
 
 		// We read the options-pnl from the on-chain ledger
 		const optionsPnlSTXFromLedger = chain.callReadOnlyFn(
@@ -329,57 +316,6 @@ Clarinet.test({
 			optionsPnlSTXFromLedger.result.expectOk().expectSome(), 
 			types.uint(Math.floor(expectedOptionsPnlUSD / lastestStxusdRate * 1000000))
 		)
-	}
-})
-
-// Test if the determine-value-and-settle function correclty sets settlement-block-height for in-the-money scenario
-Clarinet.test({
-	name: "Ensure that the determine-value-and-settle function correctly sets settlement-block-height for an in-the-money option",
-	fn(chain: Chain, accounts: Map<string, Account>) {
-		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
-
-		let block = simulateTwoDepositsAndProcess(chain, accounts)
-		const totalBalances = chain.callReadOnlyFn(
-			"vault",
-			"get-total-balances",
-			[],
-			deployer.address
-		)
-		assertEquals(totalBalances.result, types.uint(3000000))
-
-		// Initialize the first auction; the strike price is in-the-money (below spot)
-		block = initFirstAuction(
-			chain, 
-			deployer.address,
-			testAuctionStartTime, 
-			testCycleExpiry,  
-			'inTheMoney', 
-			redstoneDataOneMinApart
-		);
-		assertEquals(block.receipts.length, 5);
-
-		// Mint two option NFTs
-		block = initMint(
-			chain, 
-			accountA.address, 
-			accountB.address, 
-			redstoneDataOneMinApart
-		)
-		assertEquals(block.receipts.length, 2);
-		
-		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger the end-current-cycle method
-		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
-		block.receipts[0].result.expectOk().expectBool(true);
-
-		// We read the settlement-block-height from the on-chain contract
-		const settlementBlockHeight = chain.callReadOnlyFn(
-			"options-nft",
-			"get-settlement-block-height",
-			[],
-			deployer.address
-		)
-		// And expect it to be equal to the block-height of when it was set (in the last block)
-		settlementBlockHeight.result.expectUint(block.height - 1);
 	}
 })
 
