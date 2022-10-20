@@ -73,8 +73,8 @@
 
 ;; private functions
 
-;; <shift-to-next-cycle>: 
-(define-private (shift-to-next-cycle) ;; Rename transition-to-next-cycle?
+;; <transition-to-next-cycle>: 
+(define-private (transition-to-next-cycle)
 	(let
 		(
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-milliseconds))
@@ -187,7 +187,7 @@
 	)
 )
 
-;; <init-auction>: Initialize an auction with a normal start time 120min after the last cycle expiry.
+;; <init-auction>: Initialize an auction with a normal start time 120 min after the last cycle expiry.
 (define-private (init-auction) 
 	(let
 		(
@@ -299,7 +299,7 @@
 		(var-set last-seen-timestamp timestamp)		
 
 		(if cycle-expired
-			(try! (shift-to-next-cycle))
+			(try! (transition-to-next-cycle))
 			true
 		)
 
