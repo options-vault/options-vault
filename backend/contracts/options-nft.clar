@@ -40,7 +40,8 @@
 (define-data-var last-stxusd-rate (optional uint) none)
 
 ;; The unix millisecond timestamp of the expiry date of the current cycle
-(define-data-var current-cycle-expiry uint u1666368000000) ;; set to Fri Oct 21 2022 16:00:00 GMT+0000
+;; TODO: Rename to cycle-expiry
+(define-data-var current-cycle-expiry uint u1666368000000) ;; set to Fri Oct 21 2022 16:00:00 GMT+0000 
 (define-constant week-in-milliseconds u604800000)
 (define-constant min-in-milliseconds u60000)
 
@@ -73,7 +74,7 @@
 ;; private functions
 
 ;; <shift-to-next-cycle>: 
-(define-private (shift-to-next-cycle)
+(define-private (shift-to-next-cycle) ;; Rename transition-to-next-cycle?
 	(let
 		(
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-milliseconds))
@@ -99,17 +100,17 @@
 (define-private (determine-value) 
 	(let
 		(
-			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
-			(settlement-expiry (var-get current-cycle-expiry))
-	  	(settlement-options-ledger-entry (try! (get-options-ledger-entry settlement-expiry)))
-    	(strike (get strike settlement-options-ledger-entry))
+			(settlement-cycle-expiry (var-get current-cycle-expiry))
+	  	(settlement-options-ledger-entry (try! (get-options-ledger-entry settlement-cycle-expiry)))
+    	(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
+			(strike (get strike settlement-options-ledger-entry))
 			(last-token-id (var-get token-id-nonce))
-			(cycle-tuple { cycle-expiry: settlement-expiry, last-token-id: last-token-id })
+			(cycle-tuple { cycle-expiry: settlement-cycle-expiry, last-token-id: last-token-id })
 		)
 		(if (> stxusd-rate strike) 
 			;; Option is in-the-money, pnl is positive
 			(map-set options-ledger 
-				{ cycle-expiry: settlement-expiry } 
+				{ cycle-expiry: settlement-cycle-expiry } 
 				(merge
 					settlement-options-ledger-entry
 					{ 
@@ -119,7 +120,7 @@
 			)
 			;; Option is out-of-the-money, pnl is zero
 			(map-set options-ledger 
-				{ cycle-expiry: settlement-expiry } 
+				{ cycle-expiry: settlement-cycle-expiry } 
 				(merge
 					settlement-options-ledger-entry
 					{ 
@@ -138,11 +139,11 @@
 (define-private (create-settlement-pool) 
 	(let
 		(
-			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
-			(settlement-expiry (var-get current-cycle-expiry))
-	  	(settlement-options-ledger-entry (try! (get-options-ledger-entry settlement-expiry)))
+			(settlement-cycle-expiry (var-get current-cycle-expiry))
+	  	(settlement-options-ledger-entry (try! (get-options-ledger-entry settlement-cycle-expiry)))
 			(option-pnl (unwrap-panic (get option-pnl settlement-options-ledger-entry)))
 			(options-minted-amount (+ (- (get last-token-id settlement-options-ledger-entry) (get first-token-id settlement-options-ledger-entry)) u1))
+			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
 		)
 		(if (> option-pnl u0) 
 			;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
