@@ -70,6 +70,7 @@ export function setTrustedOracle(chain: Chain, senderAddress: string): Block {
 	]);
 }
 
+// TODO Rename to simulateTwoDeposits
 // Creates two depositors for wallet_1 (1 STX) and wallet_2 (2 STX)
 export function createTwoDepositors(chain: Chain, accounts: Map<string, Account>) {
   const wallet_1 = accounts.get('wallet_1')!.address;
@@ -82,6 +83,7 @@ export function createTwoDepositors(chain: Chain, accounts: Map<string, Account>
   return block
 }
 
+// TODO Rename to simulateTwoDepositsAndProcess
 // Creates two depositors for wallet_1 (1 STX) and wallet_2 (2 STX) 
 // and processes the deposits so that the ledger moves it from pending-deposits to balance
 export function createTwoDepositorsAndProcess(chain: Chain, accounts: Map<string, Account>) {
@@ -173,40 +175,65 @@ export function submitPriceDataAndTest(
     return block;
 }
 
-// Note: auction-decrement-value is not being set
+// Sets current-cycle-expiry to the provided timestamp
+export function setCurrCycleExpiry(
+  chain: Chain,
+  deployerAddress: string,
+  cycleExpiry: number,
+  ): Block {
+    let block = chain.mineBlock([
+      // sets current-cycle-expiry to the provided timestamp
+      Tx.contractCall(
+        "options-nft", 
+        "set-current-cycle-expiry", 
+        [types.uint(cycleExpiry)], 
+        deployerAddress
+      )
+    ]);
+    return block;
+}
+
+// TODO: set auction-decrement-value
+// TODO: take out set-current-cycle-expiry call and refactor options-nft tests
 export function initFirstAuction(
   chain: Chain, 
   deployerAddress: string,
   auctionStart: number, 
-  cycleExpiry: number,
+  cycleExpiry: number, // TODO: Pull cycleExpiry into another init function - setCycleExpiry
   strikeMultiplier: number, 
-  redstoneData: RedstoneData[]): Block {
+  redstoneData: RedstoneData[]
+  ): Block {
 
     let block = chain.mineBlock([
+      // sets current-cycle-expiry to the provided timestamp
       Tx.contractCall(
         "options-nft", 
         "set-current-cycle-expiry", 
         [types.uint(cycleExpiry)], 
         deployerAddress
       ),
+      // Creates a ledger entry for the current-cycle-expiry with the provided strike price
       Tx.contractCall(
         "options-nft", 
         "set-options-ledger-entry", 
         [types.uint(shiftPriceValue(redstoneData[0].value * strikeMultiplier))], // strike = spot + 15% 
         deployerAddress
       ),
+      // Sets the options-price-in-usd to the provided uint
       Tx.contractCall(
         "options-nft", 
         "set-options-price-in-usd", 
         [types.uint(shiftPriceValue(redstoneData[0].value * 0.02))], // options-price = spot * 0.5% 
         deployerAddress
       ),
+      // Sets the auction start time to the provided timestamp 
       Tx.contractCall(
         "options-nft", 
         "set-auction-start-time", 
         [types.uint(auctionStart)], // Fri Oct 14 2022 16:10:54 GMT+0000
         deployerAddress
       ),
+      // Sets the amount of options-for-sale
       Tx.contractCall(
         "options-nft", 
         "set-options-for-sale", 
@@ -218,7 +245,11 @@ export function initFirstAuction(
 }
 
 // Creates an auction that deposits, inits auction, buys 2 nfts, closes auction and initializes claim period
-export function initAuctionReadyToClaim(chain: Chain, accounts: Map<string, Account>, inTheMoney: boolean){
+export function initAuctionReadyToClaim(
+  chain: Chain, 
+  accounts: Map<string, Account>, 
+  inTheMoney: boolean
+  ){
   const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 	
   let block = createTwoDepositorsAndProcess(chain, accounts)
