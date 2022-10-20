@@ -73,13 +73,15 @@
 ;; private functions
 
 ;; <init-next-cycle>: 
-(define-private (init-next-cycle) 
+(define-private (init-next-cycle) ;; TODO: Rename to cycle-transition or transition-cycle or transition or transition-to-next-cycle
 	(let
 		(
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-milliseconds))
 		) 
-		;; Determine the value of the expired options NFT (pnl) and if ITM, create a settlement-pool for payouts to NFT holders
-		(try! (settle-cycle)) 
+		;; Determine the value of the expired options NFT (pnl)
+		(try! (determine-value)) 
+		;; Create a settlement-pool for payouts to holders of in-the-money options NFTs
+		(try! (create-settlement-pool))
 		;; Update the vault ledger distributing pnl to vault depositors and processing intra-week deposits and withdrawals
 		(try! (update-vault-ledger))
 		;; Create an options-ledger entry for the next cycle
@@ -93,32 +95,27 @@
 	)
 )
 
-;; <settle-cycle>: 
-(define-private (settle-cycle)
+;; <determine-value>: 
+(define-private (determine-value) 
 	(let
 		(
 			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
 			(settlement-expiry (var-get current-cycle-expiry))
 	  	(settlement-options-ledger-entry (try! (get-options-ledger-entry settlement-expiry)))
     	(strike (get strike settlement-options-ledger-entry))
-			(options-minted-amount (+ (- (get last-token-id settlement-options-ledger-entry) (get first-token-id settlement-options-ledger-entry)) u1))
 			(last-token-id (var-get token-id-nonce))
 			(cycle-tuple { cycle-expiry: settlement-expiry, last-token-id: last-token-id })
-		) 
+		)
 		(if (> stxusd-rate strike) 
 			;; Option is in-the-money, pnl is positive
-			(begin
-				(map-set options-ledger 
-					{ cycle-expiry: settlement-expiry } 
-					(merge
-						settlement-options-ledger-entry
-						{ 
-							option-pnl: (some (usd-to-stx (- stxusd-rate strike) stxusd-rate)) ;; #1: some value
-						}
-					)
+			(map-set options-ledger 
+				{ cycle-expiry: settlement-expiry } 
+				(merge
+					settlement-options-ledger-entry
+					{ 
+						option-pnl: (some (usd-to-stx (- stxusd-rate strike) stxusd-rate)) ;; #1: some value
+					}
 				)
-				;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
-				(try! (contract-call? .vault create-settlement-pool (usd-to-stx (* (- stxusd-rate strike) options-minted-amount) stxusd-rate))) ;; #2: total-settlement-pool > 0
 			)
 			;; Option is out-of-the-money, pnl is zero
 			(map-set options-ledger 
@@ -131,9 +128,29 @@
 				)
 			)
 		)
+		;; Add to options-ledger-list so that the claim function can iterate over all past cycles 
 		(add-to-options-ledger-list cycle-tuple)
 		(ok true)
-	) 
+	)
+)
+
+;; <crete-settlement-pool>: 
+(define-private (create-settlement-pool) 
+	(let
+		(
+			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
+			(settlement-expiry (var-get current-cycle-expiry))
+	  	(settlement-options-ledger-entry (try! (get-options-ledger-entry settlement-expiry)))
+			(option-pnl (unwrap-panic (get option-pnl settlement-options-ledger-entry)))
+			(options-minted-amount (+ (- (get last-token-id settlement-options-ledger-entry) (get first-token-id settlement-options-ledger-entry)) u1))
+		)
+		(if (> option-pnl u0) 
+			;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
+			(try! (contract-call? .vault create-settlement-pool (usd-to-stx (* option-pnl options-minted-amount) stxusd-rate))) ;; #2: total-settlement-pool > 0 
+			true
+		)
+		(ok true)
+	)
 )
 
 ;; <update-vault-ledger>: The function is called at the end of a cycle to update the vault ledger 
