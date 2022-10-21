@@ -590,8 +590,8 @@ Clarinet.test({
                 deployer
             ),
             Tx.contractCall(
-                'vault',
-                'claim-settlement',
+                'options-nft',
+                'claim-settlement-from-options',
                 [ types.uint(500000), types.principal(wallet_1) ],
                 deployer
             )
@@ -618,14 +618,14 @@ Clarinet.test({
 
         let block = chain.mineBlock([
             Tx.contractCall(
-                'vault',
-                'create-settlement-pool',
+                'options-nft',
+                'create-settlement-pool-from-options',
                 [ types.uint(1000000) ],
                 deployer
             ),
             Tx.contractCall(
-                'vault',
-                'claim-settlement',
+                'options-nft',
+                'claim-settlement-from-options',
                 [ types.uint(500000), types.principal(wallet_1) ],
                 deployer
             )
@@ -645,14 +645,14 @@ Clarinet.test({
 
         let block = chain.mineBlock([
             Tx.contractCall(
-                'vault',
-                'create-settlement-pool',
+                'options-nft',
+                'create-settlement-pool-from-options',
                 [ types.uint(1000000) ],
                 deployer
             ),
             Tx.contractCall(
-                'vault',
-                'claim-settlement',
+                'options-nft',
+                'claim-settlement-from-options',
                 [ types.uint(5000000), types.principal(wallet_1) ],
                 deployer
             )
@@ -672,14 +672,14 @@ Clarinet.test({
 
         let block = chain.mineBlock([
             Tx.contractCall(
-                'vault',
-                'create-settlement-pool',
+                'options-nft',
+                'create-settlement-pool-from-options',
                 [ types.uint(1000000) ],
                 deployer
             ),
             Tx.contractCall(
-                'vault',
-                'claim-settlement',
+                'options-nft',
+                'claim-settlement-from-options',
                 [ types.uint(0), types.principal(wallet_1) ],
                 deployer
             )

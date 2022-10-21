@@ -592,3 +592,7 @@
 (define-public (distribute-pnl-from-options) 
 	(as-contract (contract-call? .vault distribute-pnl))
 )
+
+(define-public (claim-settlement-from-options (amount uint) (recipient principal)) 
+	(as-contract (contract-call? .vault claim-settlement amount recipient))
+)

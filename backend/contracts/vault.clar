@@ -110,6 +110,7 @@
 (define-public (deposit-premium (amount uint) (original-sender principal)) 
   (begin
     (asserts! (> amount u0) ERR_INVALID_AMOUNT)
+    (asserts! (not (is-eq original-sender CONTRACT_ADDRESS)) ERR_VAULT_NOT_ALLOWED)
     (try! (stx-transfer? amount original-sender CONTRACT_ADDRESS))
     (ok true)
   )
