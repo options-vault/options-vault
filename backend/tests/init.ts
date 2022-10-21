@@ -113,7 +113,7 @@ export function simulateTwoDepositsAndProcess(chain: Chain, accounts: Map<string
   let block = chain.mineBlock([
       Tx.contractCall("vault", "queue-deposit", [types.uint(1000000)], wallet_1),
       Tx.contractCall("vault", "queue-deposit", [types.uint(2000000)], wallet_2),
-      Tx.contractCall("vault", "process-deposits", [], wallet_1)
+      Tx.contractCall("options-nft", "process-deposits-from-options", [], wallet_1)
   ]);
   return block
 }

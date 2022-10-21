@@ -150,7 +150,7 @@
 		)
 		(if (> option-pnl u0) 
 			;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
-			(try! (contract-call? .vault create-settlement-pool (* option-pnl options-minted-amount))) ;; #2: total-settlement-pool > 0 
+			(try! (as-contract (contract-call? .vault create-settlement-pool (* option-pnl options-minted-amount)))) ;; #2: total-settlement-pool > 0 
 			true
 		)
 		(ok true)
@@ -161,9 +161,9 @@
 ;;                        to represents the option-pnl as well as the intra-cycle deposits and withdrawals.
 (define-private (update-vault-ledger) 
 	(begin 
-		(unwrap! (contract-call? .vault distribute-pnl) ERR_PNL_DISTRIBUTION)
-		(unwrap! (contract-call? .vault process-deposits) ERR_PROCESS_DEPOSITS)
-		(unwrap! (contract-call? .vault process-withdrawals) ERR_PROCESS_WITHDRAWALS)
+		(try! (as-contract (contract-call? .vault distribute-pnl)))
+		(try! (as-contract (contract-call? .vault process-deposits)))
+		(try! (as-contract (contract-call? .vault process-withdrawals)))
 		(ok true)
 	)
 )
@@ -319,7 +319,7 @@
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
 			(token-id (+ (var-get token-id-nonce) u1))
       (current-cycle-options-ledger-entry (try! (get-options-ledger-entry (var-get current-cycle-expiry))))
-			(stxusd-rate (unwrap! (get value (element-at (filter is-stx entries) u0)) ERR_RETRIEVING_STXUSD_PRICE_DATA)) ;; had to take out the filter to pass test
+			(stxusd-rate (unwrap! (get value (element-at (filter is-stx entries) u0)) ERR_RETRIEVING_STXUSD_PRICE_DATA))
 		)
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
 		;; Check if an options-nft is available for sale. The contract can only sell as many options-nfts as there are funds in the vault
@@ -373,7 +373,7 @@
 				;; Transfer options NFT to settlement contract
 				(try! (transfer token-id tx-sender (as-contract tx-sender)))
 				;; Transfer STX out of th settlement pool in the vault contract to recipient
-				(try! (contract-call? .vault claim-settlement option-pnl recipient)) ;; TODO: rename to pay-claim or settle-claim
+				(try! (as-contract (contract-call? .vault claim-settlement option-pnl recipient))) ;; TODO: rename to pay-claim or settle-claim
 			)
 			true
 		)
@@ -574,4 +574,9 @@
 ;; TODO: Is this function still needed?
 (define-public (recover-signer  (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65))) 
 	(contract-call? .redstone-verify recover-signer timestamp entries signature)
+)
+
+;; Helper function for process-deposits
+(define-public (process-deposits-from-options) 
+	(as-contract (contract-call? .vault process-deposits))
 )
