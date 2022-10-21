@@ -3,7 +3,9 @@ import { Clarinet, Tx, Chain, Account, types, assertEquals, stringToUint8Array, 
 import type { PricePackage, Block } from "./deps.ts";
 import axiod from "https://deno.land/x/axiod@0.26.2/mod.ts";
 import { redstoneDataOneMinApart } from "./redstone-data.ts";
-import { PriceDataForContract, createTwoDepositorsAndProcess, createTwoDepositors, initFirstAuction, initMint, setTrustedOracle, submitPriceData, submitPriceDataAndTest, initAuctionReadyToClaim, convertRedstoneToContractData } from "./init.ts";
+import { PriceDataForContract, simulateTwoDepositsAndProcess, simulateTwoDeposits, initFirstAuction, initMint, setTrustedOracle, submitPriceData, 
+	submitPriceDataAndTest, simulateFirstCycleTillExpiry, convertRedstoneToContractData, setCurrentCycleExpiry 
+	} from "./init.ts";
 
 const contractOwner = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM";
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
@@ -16,6 +18,7 @@ const untrustedOraclePubkey = "0x03cd2cfdbd2ad9332828a7a13ef62cb999e063421c708e8
 const firstRedstoneTimestamp = redstoneDataOneMinApart[0].timestamp; // timestamp 1/10
 const midRedstoneTimestamp = redstoneDataOneMinApart[4].timestamp; // timestamp 5/10
 const lastRedstoneTimestamp = redstoneDataOneMinApart[9].timestamp; // timestamp 10/10
+const weekInMilliseconds = 604800000;
 
 // Testing constants
 const testAuctionStartTime = firstRedstoneTimestamp - 10; 
@@ -25,212 +28,9 @@ const testOptionsUsdPricingMultiplier = 0.02
 const testOutOfTheMoneyStrikePriceMultiplier = 1.15 // 15% above spot
 const testInTheMoneyStrikePriceMultiplier = 0.8 // 20% below spot
 
-Clarinet.test({
-	name: "Ensure that user cannot cash in until date",
-	fn(chain: Chain, accounts: Map<string, Account>) {
-		const [deployer, wallet_1, wallet_2] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
-		
-		//let block = createTwoDepositorsAndProcess(chain, accounts);
-		let block = initAuctionReadyToClaim(chain, accounts, true);
+// ### TEST FIRST AUCTION INITIALZIATION
 
-		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
-
-		block = chain.mineBlock([
-			Tx.contractCall("options-nft", "claim", [types.uint(0),dataForContract.timestamp, dataForContract.price, dataForContract.signature], wallet_1)
-		])
-
-		block.receipts[0].result.expectErr().expectUint(120)
-	}
-})
-
-Clarinet.test({
-	name: "Ensure that another user cannot claim with another user's in the money nft",
-	fn(chain: Chain, accounts: Map<string, Account>) {
-		const [deployer, wallet_1, wallet_2] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
-		
-		//let block = createTwoDepositorsAndProcess(chain, accounts);
-		let block = initAuctionReadyToClaim(chain, accounts, true);
-
-		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
-
-		block = chain.mineBlock([
-			Tx.contractCall("options-nft", "claim", [types.uint(1),dataForContract.timestamp, dataForContract.price, dataForContract.signature], wallet_2)
-		])
-		
-		block.receipts[0].result.expectErr().expectUint(1)
-	}
-})	
-
-Clarinet.test({
-	name: "Ensure that user can claim with in the money nft",
-	fn(chain: Chain, accounts: Map<string, Account>) {
-		const [deployer, wallet_1, wallet_2] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
-		
-		//let block = createTwoDepositorsAndProcess(chain, accounts);
-		let block = initAuctionReadyToClaim(chain, accounts, true);
-
-		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
-
-		block = chain.mineBlock([
-			Tx.contractCall("options-nft", "claim", [types.uint(1),dataForContract.timestamp, dataForContract.price, dataForContract.signature], wallet_1)
-		])
-		
-		block.receipts[0].events.expectSTXTransferEvent(194694, optionsNFTContract, wallet_1);
-	}
-})
-
-Clarinet.test({
-	name: "Ensure that user cannot claim with out of the money nft",
-	fn(chain: Chain, accounts: Map<string, Account>) {
-		const [deployer, wallet_1, wallet_2] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
-		
-		//let block = createTwoDepositorsAndProcess(chain, accounts);
-		let block = initAuctionReadyToClaim(chain, accounts, false);
-
-		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
-
-		block = chain.mineBlock([
-			Tx.contractCall("options-nft", "claim", [types.uint(2),dataForContract.timestamp, dataForContract.price, dataForContract.signature], wallet_2)
-		])
-		block.receipts[0].result.expectErr().expectUint(3)
-		//block.receipts[0].events
-	}
-})
-
-Clarinet.test({
-	name: "Ensure cannot init next cycle if it is not time yet",
-	fn(chain: Chain, accounts: Map<string, Account>) {
-		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
-
-		let block = initAuctionReadyToClaim(chain, accounts, true)
-
-		// We read the settlement-block-height from the on-chain contract
-		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
-
-		block = chain.mineBlock([
-			Tx.contractCall("options-nft", "submit-price-data", [dataForContract.timestamp, dataForContract.price, dataForContract.signature], deployer)
-		])
-		block.receipts[0].result.expectErr().expectUint(105)
-	}
-})
-
-Clarinet.test({
-	name: "Ensure can init-next-cycle when options are out of the money",
-	fn(chain: Chain, accounts: Map<string, Account>) {
-		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
-
-		let block = initAuctionReadyToClaim(chain, accounts, false)
-
-		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
-
-		block = chain.mineBlock([
-			Tx.contractCall("options-nft", "submit-price-data", [dataForContract.timestamp, dataForContract.price, dataForContract.signature], deployer)
-		])
-		block.receipts[0].result.expectOk().expectBool(true)
-	}
-})
-
-Clarinet.test({
-	name: "Ensure can init-next-cycle including payout pool when options are in the money",
-	fn(chain: Chain, accounts: Map<string, Account>) {
-		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)?.address!);
-
-		let block = initAuctionReadyToClaim(chain, accounts, true)
-
-		let dataForContract = convertRedstoneToContractData(redstoneDataOneMinApart[7])
-		block = chain.mineBlock([])
-
-		block = chain.mineBlock([
-			Tx.contractCall("options-nft", "submit-price-data", [dataForContract.timestamp, dataForContract.price, dataForContract.signature], deployer)
-		])
-		console.log(block.receipts)
-
-	}
-})
-
-// Testing setting trusted oracle
-Clarinet.test({
-	name: "Ensure that the contract owner can set trusted oracle",
-	fn(chain: Chain, accounts: Map<string, Account>) {
-		const deployer = accounts.get("deployer")!;
-		const block = setTrustedOracle(chain, deployer.address);
-		const [receipt] = block.receipts;
-		receipt.result.expectOk().expectBool(true);
-		console.log(deployer.address)
-		const trusted = chain.callReadOnlyFn("options-nft", "is-trusted-oracle", [trustedOraclePubkey], deployer.address);
-		const untrusted = chain.callReadOnlyFn("options-nft", "is-trusted-oracle", [untrustedOraclePubkey], deployer.address);
-		trusted.result.expectBool(true);
-		untrusted.result.expectBool(false);
-	},
-});
-
-// Testing recover-signer
-Clarinet.test({
-    name: "Ensure that the price package is signed by the same pubkey on every call",
-    async fn(chain: Chain, accounts: Map<string, Account>) {
-
-		const wallet_1 = accounts.get('wallet_1')!.address;
-
-		let redstone_response = { timestamp: 0, liteEvmSignature: "", value: 0 }
-		await axiod.get("https://api.redstone.finance/prices?symbol=STX&provider=redstone").then((response) => {
-				redstone_response = response.data[0]
-		});
-
-		const pricePackage: PricePackage = {
-			timestamp: redstone_response.timestamp,
-			prices: [{ symbol: "STX", value: redstone_response.value }]
-		}
-		const packageCV = pricePackageToCV(pricePackage);
-
-		let block = chain.mineBlock([
-			Tx.contractCall("options-nft", "recover-signer", [
-				packageCV.timestamp,
-				packageCV.prices,
-				types.buff(liteSignatureToStacksSignature(redstone_response.liteEvmSignature))
-			], wallet_1)
-		]);
-
-		const signer = block.receipts[0].result.expectOk()
-		
-		const isTrusted = chain.callReadOnlyFn(
-			"options-nft",
-			"is-trusted-oracle",
-			[signer],
-			wallet_1
-		)
-
-    assertEquals(isTrusted.result, "true")
-    },
-});
-
-// Testing submit-price-data
-Clarinet.test({
-	name: "Ensure that anyone can submit price data signed by trusted oracles",
-	fn(chain: Chain, accounts: Map<string, Account>) {
-		const [accountA] = ["wallet_1"].map(who => accounts.get(who)!);
-
-		const block = submitPriceData(chain, accountA.address, redstoneDataOneMinApart[0])
-    block.receipts[0].result.expectOk().expectBool(true);
-
-		const lastSeenTimestamp = chain.callReadOnlyFn(
-			"options-nft",
-			"get-last-seen-timestamp",
-			[],
-			accountA.address
-		)
-		assertEquals(lastSeenTimestamp.result, types.utf8(redstoneDataOneMinApart[0].timestamp))
-
-		const lastSTXUSDRate = chain.callReadOnlyFn(
-			"options-nft",
-			"get-last-stxusd-rate",
-			[],
-			accountA.address
-		)
-		assertEquals(lastSTXUSDRate.result, types.some(types.uint(shiftPriceValue(redstoneDataOneMinApart[0].value))))
-	},
-});
-
-// Testing auction initalization outside of init-next-cycle; TODO: Write init-first-cycle method in the contract instead
+// Testing first auction initalization outside of init-next-cycle
 Clarinet.test({
 	name: "Ensure that the options-nft auction is properly initialized",
 	fn(chain: Chain, accounts: Map<string, Account>) {
@@ -240,7 +40,7 @@ Clarinet.test({
 			deployer.address,
 			testAuctionStartTime, 
 			testCycleExpiry, 
-			testOutOfTheMoneyStrikePriceMultiplier, 
+			'outOfTheMoney', 
 			redstoneDataOneMinApart
 		);
 
@@ -297,6 +97,8 @@ Clarinet.test({
 	},
 });
 
+// ### TEST MINT
+
 // Testing mint function
 Clarinet.test({
 	name: "Ensure that the mint function works for the right inputs",
@@ -307,7 +109,7 @@ Clarinet.test({
 			deployer.address,
 			testAuctionStartTime, 
 			testCycleExpiry,  
-			testOutOfTheMoneyStrikePriceMultiplier, 
+			'outOfTheMoney', 
 			redstoneDataOneMinApart
 		);		
 		
@@ -353,9 +155,101 @@ Clarinet.test({
 	},
 });
 
-// Test end-current-cycle function for an out-of-the-money option
+// ### TEST SUBMIT PRICE DATA
+
+// Testing submit-price-data (before expiry)
 Clarinet.test({
-	name: "Ensure that the end-current-cycle function works for an out-of-the-money option",
+	name: "Ensure that anyone can submit price data signed by trusted oracles before the current-cycle-expiry data",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		// Ensures that the submit-price-data call is always before the expiry date
+		// By setting current-cycle-expiry to a date before the date of the redstoneDataPacakge submitted
+		setCurrentCycleExpiry(chain, deployer.address, firstRedstoneTimestamp + 10);
+		// Check if current-cycle-expiry remains unchaned
+		const currentCycleExpiry = chain.callReadOnlyFn(
+			"options-nft",
+			"get-current-cycle-expiry",
+			[],
+			deployer.address
+		)
+		assertEquals(currentCycleExpiry.result, types.uint(firstRedstoneTimestamp + 10))
+
+		// Submit price data with a timestamp before the current-cycle-expiry, no further action should get triggered
+		const block = submitPriceData(chain, accountA.address, redstoneDataOneMinApart[0])
+    block.receipts[0].result.expectOk().expectBool(true);
+
+		const lastSeenTimestamp = chain.callReadOnlyFn(
+			"options-nft",
+			"get-last-seen-timestamp",
+			[],
+			accountA.address
+		)
+		assertEquals(lastSeenTimestamp.result, types.utf8(redstoneDataOneMinApart[0].timestamp))
+
+		const lastSTXUSDRate = chain.callReadOnlyFn(
+			"options-nft",
+			"get-last-stxusd-rate",
+			[],
+			accountA.address
+		)
+		assertEquals(
+			lastSTXUSDRate.result, 
+			types.some(types.uint(shiftPriceValue(redstoneDataOneMinApart[0].value)))
+		)
+	},
+});
+
+// Testing submit-price-data (after expiry)
+Clarinet.test({
+	name: "Ensure that anyone can submit price data signed by trusted oracles after the current-cycle-expiry data",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		const inTheMoneyStrikePrice = shiftPriceValue(redstoneDataOneMinApart[0].value * testInTheMoneyStrikePriceMultiplier)
+		const lastestStxusdRate = shiftPriceValue(redstoneDataOneMinApart[5].value)
+		const expectedOptionsPnlUSD = lastestStxusdRate - inTheMoneyStrikePrice
+
+		let block = simulateTwoDepositsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Initialize the first auction; the strike price is in-the-money (below spot)
+		block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'inTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		assertEquals(block.receipts.length, 2);
+		
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+	}
+})
+
+// ### TEST TRANSITION-TO-NEXT-CYCLE
+
+// Test transition-to-next-cycle function for an out-of-the-money option
+Clarinet.test({
+	name: "Ensure that the transition-to-next-cycle function works for an out-of-the-money option",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 		
@@ -364,36 +258,26 @@ Clarinet.test({
 			deployer.address,
 			testAuctionStartTime, 
 			testCycleExpiry,  
-			testOutOfTheMoneyStrikePriceMultiplier, 
+			'outOfTheMoney', 
 			redstoneDataOneMinApart
 		);
 		assertEquals(block.receipts.length, 5);
 
-		// Manually set the settlement-block-height to current block-height + 2 so that the second if statement
-		// in submit-price-data is not triggered which allows us to isolate the end-current-cycle function for testing
-		block = chain.mineBlock([
-			Tx.contractCall(
-				"options-nft", 
-				"set-settlement-block-height", 
-				[types.uint(block.height + 2)], 
-				deployer.address
-				)
-		]);
-
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
 		block.receipts[0].result.expectOk().expectBool(true);
 
-		const optionPnl = chain.callReadOnlyFn(
+		const currentCycleExpiry = chain.callReadOnlyFn(
 			"options-nft",
-			"get-option-pnl-for-expiry",
-			[types.uint(testCycleExpiry)],
+			"get-current-cycle-expiry",
+			[],
 			deployer.address
 		)
-		assertEquals(optionPnl.result.expectOk().expectSome(), types.uint(0))
+		assertEquals(currentCycleExpiry.result, types.uint(testCycleExpiry + weekInMilliseconds))
 	}
 })
 
-// Test end-current-cycle function for in-the-money option
+// Test transition-to-next-cycle function for an in-the-money option
 Clarinet.test({
 	name: "Ensure that the end-current-cycle function works for an in-the-money option",
 	fn(chain: Chain, accounts: Map<string, Account>) {
@@ -403,7 +287,7 @@ Clarinet.test({
 		const lastestStxusdRate = shiftPriceValue(redstoneDataOneMinApart[5].value)
 		const expectedOptionsPnlUSD = lastestStxusdRate - inTheMoneyStrikePrice
 
-		let block = createTwoDepositorsAndProcess(chain, accounts)
+		let block = simulateTwoDepositsAndProcess(chain, accounts)
 		const totalBalances = chain.callReadOnlyFn(
 			"vault",
 			"get-total-balances",
@@ -418,7 +302,7 @@ Clarinet.test({
 			deployer.address,
 			testAuctionStartTime, 
 			testCycleExpiry,  
-			testInTheMoneyStrikePriceMultiplier, 
+			'inTheMoney', 
 			redstoneDataOneMinApart
 		);
 		assertEquals(block.receipts.length, 5);
@@ -432,12 +316,9 @@ Clarinet.test({
 		)
 		assertEquals(block.receipts.length, 2);
 		
-		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger the end-current-cycle method
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
 		block.receipts[0].result.expectOk().expectBool(true);
-		// Since the option was in-the-money, we expect a settlement tx that sends all STX
-		// owed to NFT holders from the vaultContract to the optionsNFTContract
-		block.receipts[0].events.expectSTXTransferEvent(389389, vaultContract, optionsNFTContract)
 
 		// We read the options-pnl from the on-chain ledger
 		const optionsPnlSTXFromLedger = chain.callReadOnlyFn(
@@ -446,7 +327,6 @@ Clarinet.test({
 			[types.uint(testCycleExpiry)],
 			deployer.address
 		)
-		optionsPnlSTXFromLedger.result.expectOk().expectSome()
 		// And compare the on-chain ledger entry to the number we would expect from our input values
 		assertEquals(
 			optionsPnlSTXFromLedger.result.expectOk().expectSome(), 
@@ -455,64 +335,54 @@ Clarinet.test({
 	}
 })
 
-// Test if the determine-value-and-settle function correclty sets settlement-block-height for in-the-money scenario
+// ### TEST DETERMINE-VALUE
+
+// Test determine-value function for an out-of-the-money option (OTM)
 Clarinet.test({
-	name: "Ensure that the determine-value-and-settle function correctly sets settlement-block-height for an in-the-money option",
+	name: "Ensure that the determine-value function works for an out-of-the-money option",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
-
-		let block = createTwoDepositorsAndProcess(chain, accounts)
-		const totalBalances = chain.callReadOnlyFn(
-			"vault",
-			"get-total-balances",
-			[],
-			deployer.address
-		)
-		assertEquals(totalBalances.result, types.uint(3000000))
-
-		// Initialize the first auction; the strike price is in-the-money (below spot)
-		block = initFirstAuction(
+		
+		let block = initFirstAuction(
 			chain, 
 			deployer.address,
 			testAuctionStartTime, 
 			testCycleExpiry,  
-			testInTheMoneyStrikePriceMultiplier, 
+			'outOfTheMoney', 
 			redstoneDataOneMinApart
 		);
 		assertEquals(block.receipts.length, 5);
 
-		// Mint two option NFTs
-		block = initMint(
-			chain, 
-			accountA.address, 
-			accountB.address, 
-			redstoneDataOneMinApart
-		)
-		assertEquals(block.receipts.length, 2);
-		
-		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger the end-current-cycle method
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
 		block.receipts[0].result.expectOk().expectBool(true);
 
-		// We read the settlement-block-height from the on-chain contract
-		const settlementBlockHeight = chain.callReadOnlyFn(
+		// We read the options-pnl from the on-chain ledger
+		const optionsPnlSTXFromLedger = chain.callReadOnlyFn(
 			"options-nft",
-			"get-settlement-block-height",
-			[],
+			"get-option-pnl-for-expiry",
+			[types.uint(testCycleExpiry)],
 			deployer.address
 		)
-		// And expect it to be equal to the block-height of when it was set (in the last block)
-		settlementBlockHeight.result.expectUint(block.height - 1);
+		// And compare the on-chain ledger entry to the number we would expect from our input values
+		assertEquals(
+			optionsPnlSTXFromLedger.result.expectOk().expectSome(), 
+			types.uint(0)
+		)
 	}
 })
 
-// Test that add-to-options-ledger-list function correctly adds the ended cycle-tuple
+// Test determine-value function for an in-the-money option (ITM)
 Clarinet.test({
-	name: "Ensure that the add-to-options-ledger-list function correctly adds the ended cycle-tuple for an in-the-money option",
+	name: "Ensure that the determine-value function works for an in-the-money option",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 
-		let block = createTwoDepositorsAndProcess(chain, accounts)
+		const inTheMoneyStrikePrice = shiftPriceValue(redstoneDataOneMinApart[0].value * testInTheMoneyStrikePriceMultiplier)
+		const lastestStxusdRate = shiftPriceValue(redstoneDataOneMinApart[5].value)
+		const expectedOptionsPnlUSD = lastestStxusdRate - inTheMoneyStrikePrice
+
+		let block = simulateTwoDepositsAndProcess(chain, accounts)
 		const totalBalances = chain.callReadOnlyFn(
 			"vault",
 			"get-total-balances",
@@ -527,7 +397,7 @@ Clarinet.test({
 			deployer.address,
 			testAuctionStartTime, 
 			testCycleExpiry,  
-			testInTheMoneyStrikePriceMultiplier, 
+			'inTheMoney', 
 			redstoneDataOneMinApart
 		);
 		assertEquals(block.receipts.length, 5);
@@ -541,7 +411,61 @@ Clarinet.test({
 		)
 		assertEquals(block.receipts.length, 2);
 		
-		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger the end-current-cycle method
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		// We read the options-pnl from the on-chain ledger
+		const optionsPnlSTXFromLedger = chain.callReadOnlyFn(
+			"options-nft",
+			"get-option-pnl-for-expiry",
+			[types.uint(testCycleExpiry)],
+			deployer.address
+		)
+		// And compare the on-chain ledger entry to the number we would expect from our input values
+		assertEquals(
+			optionsPnlSTXFromLedger.result.expectOk().expectSome(), 
+			types.uint(Math.floor(expectedOptionsPnlUSD / lastestStxusdRate * 1000000))
+		)
+	}
+})
+
+// Test that add-to-options-ledger-list (called by determin-value) correctly adds the expired cycle's information to the list
+Clarinet.test({
+	name: "Ensure that add-to-options-ledger-list (called by determin-value) correctly adds the expired cycle's information to the list",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		let block = simulateTwoDepositsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Initialize the first auction; the strike price is in-the-money (below spot)
+		block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'inTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		assertEquals(block.receipts.length, 2);
+		
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
 		block.receipts[0].result.expectOk().expectBool(true);
 
@@ -558,3 +482,305 @@ Clarinet.test({
 		assertEquals(optionsLedgerList.result.expectList()[0].includes(testCycleExpiry), true)
 	}
 })
+
+// ### TEST CREATE-SETTLEMENT-POOL
+
+// Test create-settlement-pool for OTM
+Clarinet.test({
+	name: "Ensure that the create-settlement-pool function works for an out-of-the-money option",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+		
+		let block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		// We read the total-settlement-pool from the vault contract
+		const totalSettlementPool = chain.callReadOnlyFn(
+			"vault",
+			"get-total-settlement-pool",
+			[],
+			deployer.address
+		)
+		assertEquals(totalSettlementPool.result, types.uint(0))
+	}
+})
+
+// Test create-settlment-pool for ITM
+Clarinet.test({
+	name: "Ensure that the create-settlement-pool function works for an in-the-money option",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		const inTheMoneyStrikePrice = shiftPriceValue(redstoneDataOneMinApart[0].value * testInTheMoneyStrikePriceMultiplier)
+		const lastestStxusdRate = shiftPriceValue(redstoneDataOneMinApart[5].value)
+		const expectedOptionsPnlUSD = lastestStxusdRate - inTheMoneyStrikePrice
+
+		let block = simulateTwoDepositsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Initialize the first auction; the strike price is in-the-money (below spot)
+		block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'inTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		assertEquals(block.receipts.length, 2);
+		
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		// We read the total-settlement-pool from the vault contract
+		const totalSettlementPool = chain.callReadOnlyFn(
+			"vault",
+			"get-total-settlement-pool",
+			[],
+			deployer.address
+		)
+		assertEquals(totalSettlementPool.result, types.uint(Math.floor(expectedOptionsPnlUSD / lastestStxusdRate * 1000000) * 2))
+	}
+})
+
+// ### TEST UPDATE-VAULT-LEDGER
+
+// Test update-vault-ledger OTM --> total-balances goes up, by mint amount
+Clarinet.test({
+	name: "Ensure that update-vault-ledger (out-of-the-money) increases total-balances",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		const inTheMoneyStrikePrice = shiftPriceValue(redstoneDataOneMinApart[0].value * testInTheMoneyStrikePriceMultiplier)
+		const lastestStxusdRate = shiftPriceValue(redstoneDataOneMinApart[5].value)
+		const expectedOptionsPnlUSD = lastestStxusdRate - inTheMoneyStrikePrice
+
+		let block = simulateTwoDepositsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Initialize the first auction; the strike price is in-the-money (below spot)
+		block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		assertEquals(block.receipts.length, 2);
+
+		// const premiumOne = Number(block.receipts[0].events[0].stx_transfer_event.amount)
+		// const premiumTwo = Number(block.receipts[1].events[0].stx_transfer_event.amount)
+
+		// console.log("premiumOne", premiumOne)
+		// console.log("premiumTwo", premiumTwo)
+
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		const totalBalancesNew = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		const totalBalanceNewNum = Number(totalBalancesNew.result.slice(1))
+		const totalBalanceNum = Number(totalBalances.result.slice(1))
+
+		// console.log("totalBalanceNewNum", totalBalanceNewNum)
+		// console.log("totalBalanceNum", totalBalanceNum)
+		assertEquals(totalBalanceNewNum > totalBalanceNum, true)
+		// assertEquals(totalBalanceNewNum, totalBalanceNum + premiumOne + premiumTwo)
+	}
+})
+
+// Test update-vault-ledger ITM --> total-balances goes down, goes down by settlement-pool
+Clarinet.test({
+	name: "Ensure that update-vault-ledger (in-the-money) decreases total-balances",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		const inTheMoneyStrikePrice = shiftPriceValue(redstoneDataOneMinApart[0].value * testInTheMoneyStrikePriceMultiplier)
+		const lastestStxusdRate = shiftPriceValue(redstoneDataOneMinApart[5].value)
+		const expectedOptionsPnlUSD = lastestStxusdRate - inTheMoneyStrikePrice
+
+		let block = simulateTwoDepositsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Initialize the first auction; the strike price is in-the-money (below spot)
+		block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'inTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		assertEquals(block.receipts.length, 2);
+
+		// const premiumOne = Number(block.receipts[0].events[0].stx_transfer_event.amount)
+		// const premiumTwo = Number(block.receipts[1].events[0].stx_transfer_event.amount)
+
+		// console.log("premiumOne", premiumOne)
+		// console.log("premiumTwo", premiumTwo)
+
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		const totalBalancesNew = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		const totalBalanceNewNum = Number(totalBalancesNew.result.slice(1))
+		const totalBalanceNum = Number(totalBalances.result.slice(1))
+
+		// console.log("totalBalancesNew", Number(totalBalancesNew.result.slice(1)))
+		// console.log("totalBalances", Number(totalBalances.result.slice(1)))
+		assertEquals(totalBalanceNewNum < totalBalanceNum, true)
+		// assertEquals(Number(totalBalancesNew.result.slice(1)), Number(totalBalances.result.slice(1)) + mintAmountOne + mintAmountTwo)
+	}
+})
+
+// TODO Add test for case 2: ITM where total premium > settlement-pool, totalBalanceNew > totalBalance 
+// --> needs a strike price less than 2% below stxusd-rate.
+
+// ### TEST DISTRIBUTE-PNL
+
+// TODO: Helper function for retrieving investor-balance?
+// TODO: Test distribute-pnl OTM --> investor-balance for accountA goes up
+// TODO: Test distribute-pnl ITM --> investor-balance for acccountB goes down
+
+// ### TEST PROCESS-DEPOSITS
+
+// Helper function: deposit wihtout processing
+// TODO: Test process-deposits OTM --> total-pending-deposits to zero
+// TODO: Test process-deposits OTM --> investor-balance for goes up AND investor-pending-deposits goes to zero
+
+// ### TEST PROCESS-WITHDRAWALS
+ 
+// Helper queue-withdrawal
+// TODO: Test process-withdrawals OTM --> total-balances goes up (with withdrwal being more than the premium payment)
+// TODO: Test process-withdrawals OTM --> STX transfer
+
+
+
+
+
+// ### TEST SET-TRUSTED-ORACLE
+
+// Testing setting trusted oracle
+Clarinet.test({
+	name: "Ensure that the contract owner can set trusted oracle",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const deployer = accounts.get("deployer")!;
+		const block = setTrustedOracle(chain, deployer.address);
+		const [receipt] = block.receipts;
+		receipt.result.expectOk().expectBool(true);
+		const trusted = chain.callReadOnlyFn("options-nft", "is-trusted-oracle", [trustedOraclePubkey], deployer.address);
+		const untrusted = chain.callReadOnlyFn("options-nft", "is-trusted-oracle", [untrustedOraclePubkey], deployer.address);
+		trusted.result.expectBool(true);
+		untrusted.result.expectBool(false);
+	},
+});
+
+// ### TEST RECOVER-SIGNER
+
+// Testing recover-signer - price package is signed by the same pubkey on every call
+Clarinet.test({
+    name: "Ensure that the price package is signed by the same pubkey on every call",
+    async fn(chain: Chain, accounts: Map<string, Account>) {
+
+		const wallet_1 = accounts.get('wallet_1')!.address;
+
+		let redstone_response = { timestamp: 0, liteEvmSignature: "", value: 0 }
+		await axiod.get("https://api.redstone.finance/prices?symbol=STX&provider=redstone").then((response) => {
+				redstone_response = response.data[0]
+		});
+
+		const pricePackage: PricePackage = {
+			timestamp: redstone_response.timestamp,
+			prices: [{ symbol: "STX", value: redstone_response.value }]
+		}
+		const packageCV = pricePackageToCV(pricePackage);
+
+		let block = chain.mineBlock([
+			Tx.contractCall("options-nft", "recover-signer", [
+				packageCV.timestamp,
+				packageCV.prices,
+				types.buff(liteSignatureToStacksSignature(redstone_response.liteEvmSignature))
+			], wallet_1)
+		]);
+
+		const signer = block.receipts[0].result.expectOk()
+		
+		const isTrusted = chain.callReadOnlyFn(
+			"options-nft",
+			"is-trusted-oracle",
+			[signer],
+			wallet_1
+		)
+
+    assertEquals(isTrusted.result, "true")
+    },
+});

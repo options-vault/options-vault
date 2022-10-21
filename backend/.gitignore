@@ -3,6 +3,5 @@
 **/settings/Testnet.toml
 .requirements/
 history.txt
-server/node_modules
-server/package-lock.json
 .cache
+tests/deprecated.ts

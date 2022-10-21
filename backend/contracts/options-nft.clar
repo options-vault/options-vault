@@ -22,6 +22,7 @@
 (define-constant ERR_READING_STXUSD_RATE (err u125))
 (define-constant ERR_NO_OPTION_PNL_AVAILABLE (err u126))
 (define-constant ERR_INIT_AUCTION (err u127))
+(define-constant ERR_PNL_DISTRIBUTION (err u128))
 
 (define-constant CONTRACT_ADDRESS (as-contract tx-sender))
 (define-data-var contract-owner principal tx-sender)
@@ -149,7 +150,7 @@
 		)
 		(if (> option-pnl u0) 
 			;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
-			(try! (contract-call? .vault create-settlement-pool (usd-to-stx (* option-pnl options-minted-amount) stxusd-rate))) ;; #2: total-settlement-pool > 0 
+			(try! (contract-call? .vault create-settlement-pool (* option-pnl options-minted-amount))) ;; #2: total-settlement-pool > 0 
 			true
 		)
 		(ok true)
@@ -160,7 +161,7 @@
 ;;                        to represents the option-pnl as well as the intra-cycle deposits and withdrawals.
 (define-private (update-vault-ledger) 
 	(begin 
-		(try! (contract-call? .vault distribute-pnl))
+		(unwrap! (contract-call? .vault distribute-pnl) ERR_PNL_DISTRIBUTION)
 		(unwrap! (contract-call? .vault process-deposits) ERR_PROCESS_DEPOSITS)
 		(unwrap! (contract-call? .vault process-withdrawals) ERR_PROCESS_WITHDRAWALS)
 		(ok true)
@@ -256,7 +257,7 @@
 
 ;; <find-options-ledger-entry>: The function returns the options-ledger-entry tuple that corresponds to the token-id provided.
 (define-private (find-options-ledger-entry (token-id uint)) 
-	(fold find-options-ledger-entry-helper (var-get options-ledger-list) { timestamp: u0, token-id: token-id, found: false })
+	(ok (fold find-options-ledger-entry-helper (var-get options-ledger-list) { timestamp: u0, token-id: token-id, found: false }))
 )
 
 (define-private (find-options-ledger-entry-helper (current-element { cycle-expiry: uint, last-token-id: uint }) (prev-value { timestamp: uint, token-id: uint, found: bool }) ) 
@@ -331,6 +332,7 @@
 		;; Update the token ID nonce
 		(var-set token-id-nonce token-id)
 		;; Deposit the premium payment into the vault contract
+		;; TODO: Can get-update-latest-price-in-stx be replaced with usd-to-stx? What benefits does get-update-latest-price-in-stx have?
 		(try! (contract-call? .vault deposit-premium (try! (get-update-latest-price-in-stx timestamp stxusd-rate)) tx-sender))
 		;; Mint the options NFT
 		(try! (nft-mint? options-nft token-id tx-sender))
@@ -353,7 +355,7 @@
     (
       (recipient tx-sender)
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
-			(token-expiry (get timestamp (find-options-ledger-entry token-id)))
+			(token-expiry (get timestamp (unwrap-panic (find-options-ledger-entry token-id))))
 			(settlement-options-ledger-entry (try! (get-options-ledger-entry token-expiry)))
 			(option-pnl  (unwrap! (get option-pnl settlement-options-ledger-entry) ERR_NO_OPTION_PNL_AVAILABLE))
 			(first-token-id (get first-token-id settlement-options-ledger-entry)) 
@@ -361,17 +363,17 @@
     )
 		;; Check if the signer is a trusted oracle
     (asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
-		;; Check if provided token-id is in the range for the expiry
-		(asserts! (and (>= token-id first-token-id) (<= token-id last-token-id)) ERR_TOKEN_ID_NOT_IN_EXPIRY_RANGE)
 		;; Check if options is expired
 		(asserts! (> timestamp token-expiry) ERR_OPTION_NOT_EXPIRED) 
+		;; Check if provided token-id is in the range for the expiry
+		(asserts! (and (>= token-id first-token-id) (<= token-id last-token-id)) ERR_TOKEN_ID_NOT_IN_EXPIRY_RANGE)
 		;; Check if option-pnl for the options NFT is above zero (in-the-money)
 		(if (> option-pnl u0) 
 			(begin
 				;; Transfer options NFT to settlement contract
 				(try! (transfer token-id tx-sender (as-contract tx-sender)))
 				;; Transfer STX out of th settlement pool in the vault contract to recipient
-				(try! (contract-call? .vault claim-settlement option-pnl recipient))
+				(try! (contract-call? .vault claim-settlement option-pnl recipient)) ;; TODO: rename to pay-claim or settle-claim
 			)
 			true
 		)
@@ -410,7 +412,7 @@
 	)
 )
 
-(define-public (get-contract-owner)
+(define-read-only (get-contract-owner)
 	(ok (var-get contract-owner))
 )
 
@@ -478,7 +480,9 @@
 	(var-get last-stxusd-rate)
 )
 
-;; (!) For testing purposes, delete setter functions for deployment to improve contract security (!)
+;; TESTING HELPER FUNCTIONS
+;; (!) For testing purposes only, not to be deployed to production (!)
+;; (!) Delete setter functions for deployment to improve contract security and cost efficiency (!)
 
 ;; auction-start-time
 ;; #[allow(unchecked_data)]
