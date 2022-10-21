@@ -1,12 +1,13 @@
 ;; vault
 
 (define-constant CONTRACT_ADDRESS (as-contract tx-sender))
+(define-constant OPTIONS_NFT_CONTRACT .options-nft)
 
 (define-constant ERR_INVALID_AMOUNT (err u100))
 (define-constant ERR_VAULT_NOT_ALLOWED (err u101))
 (define-constant ERR_INSUFFICIENT_FUNDS (err u102))
 (define-constant ERR_TX_SENDER_NOT_IN_LEDGER (err u103))
-(define-constant ERR_ONLY_CONTRACT_ALLOWED (err u104))
+(define-constant ERR_ONLY_NFT_CONTRACT_ALLOWED (err u104))
 (define-constant ERR_TX_NOT_APPLIED_YET (err u105))
 (define-constant ERR_PREMIUM_NOT_SPLITTED_CORRECTLY (err u106))
 (define-constant ERR_SETTLEMENT_POOL_NOT_ENOUGH (err u107))
@@ -72,9 +73,9 @@
 
 ;; <process-deposits>: The function iterates over the `investor-addresses` list and applies the `pending-deposits` amount to 
 ;;                     the investor's ledger `balance`.
-;; TODO: Only allow options-nft contract to call this function
 (define-public (process-deposits)
   (begin
+    (asserts! (is-eq tx-sender OPTIONS_NFT_CONTRACT) ERR_ONLY_NFT_CONTRACT_ALLOWED)
     (map process-deposits-updater (var-get investor-addresses))
     (ok true)
   )
@@ -109,7 +110,6 @@
 (define-public (deposit-premium (amount uint) (original-sender principal)) 
   (begin
     (asserts! (> amount u0) ERR_INVALID_AMOUNT)
-    (asserts! (not (is-eq original-sender CONTRACT_ADDRESS)) ERR_VAULT_NOT_ALLOWED)
     (try! (stx-transfer? amount original-sender CONTRACT_ADDRESS))
     (ok true)
   )
@@ -156,6 +156,7 @@
 ;;                        an on-chain STX transfer for the requested amount.
 (define-public (process-withdrawals)
   (begin
+    (asserts! (is-eq tx-sender OPTIONS_NFT_CONTRACT) ERR_ONLY_NFT_CONTRACT_ALLOWED)
     (map process-withdrawals-updater (var-get investor-addresses))
     (var-set investor-addresses (filter investors-filter (var-get investor-addresses)))
     (ok true)
@@ -238,8 +239,7 @@
 ;;<distribute-pnl>: The function distributes the cycle's profit and loss (pnl) to the investor's in the ledger on a pro-rata basis.
 (define-public (distribute-pnl)
   (begin
-    ;; TODO: Add assert that the function can only called by the options-nft contract
-    ;; (asserts! (is-eq CONTRACT_ADDRESS tx-sender) ONLY_CONTRACT_ALLOWED)
+    (asserts! (is-eq tx-sender OPTIONS_NFT_CONTRACT) ERR_ONLY_NFT_CONTRACT_ALLOWED)
     (var-set temp-total-balances (var-get total-balances))
     (map pnl-evaluator (var-get investor-addresses))
     ;; TODO: Investigate reason for the assert not to work for ITM scenarios, because of a rounding error?
@@ -305,7 +305,7 @@
 ;; #[allow(unchecked_data)]
 (define-public (create-settlement-pool (amount uint))
   (begin
-    ;; (asserts! (is-eq contract-caller ) (err thrown)) ;; TODO: create variable that holds principal of options-nft contract for comparison
+    (asserts! (is-eq tx-sender OPTIONS_NFT_CONTRACT) ERR_ONLY_NFT_CONTRACT_ALLOWED)
     (asserts! (> amount u0) ERR_INVALID_AMOUNT)
     (var-set total-settlement-pool (+ (var-get total-settlement-pool) amount))
     (ok true)
@@ -316,8 +316,8 @@
 ;; #[allow(unchecked_data)]
 (define-public (claim-settlement (amount uint) (recipient principal)) 
   (begin
-    ;; (asserts! (is-eq contract-caller ) (err thrown)) ;; TODO: create variable that holds principal of options-nft contract for comparison
     (asserts! (> amount u0) ERR_INVALID_AMOUNT)
+    (asserts! (is-eq tx-sender OPTIONS_NFT_CONTRACT) ERR_ONLY_NFT_CONTRACT_ALLOWED)
     (asserts! (>= (var-get total-settlement-pool) amount) ERR_SETTLEMENT_POOL_NOT_ENOUGH)
     (asserts! (>= (stx-get-balance CONTRACT_ADDRESS) amount) ERR_INSUFFICIENT_CONTRACT_FUNDS)
     (try! (as-contract (stx-transfer? amount tx-sender recipient)))
