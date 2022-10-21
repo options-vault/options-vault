@@ -28,7 +28,7 @@ const testOptionsUsdPricingMultiplier = 0.02
 const testOutOfTheMoneyStrikePriceMultiplier = 1.15 // 15% above spot
 const testInTheMoneyStrikePriceMultiplier = 0.8 // 20% below spot
 
-// TEST FIRST AUCTION INITIALZIATION
+// ### TEST FIRST AUCTION INITIALZIATION
 
 // Testing first auction initalization outside of init-next-cycle
 Clarinet.test({
@@ -97,7 +97,7 @@ Clarinet.test({
 	},
 });
 
-// TEST MINT
+// ### TEST MINT
 
 // Testing mint function
 Clarinet.test({
@@ -155,7 +155,7 @@ Clarinet.test({
 	},
 });
 
-// TEST SUBMIT PRICE DATA
+// ### TEST SUBMIT PRICE DATA
 
 // Testing submit-price-data (before expiry)
 Clarinet.test({
@@ -245,7 +245,7 @@ Clarinet.test({
 	}
 })
 
-// TEST TRANSITION-TO-NEXT-CYCLE
+// ### TEST TRANSITION-TO-NEXT-CYCLE
 
 // Test transition-to-next-cycle function for an out-of-the-money option
 Clarinet.test({
@@ -335,7 +335,7 @@ Clarinet.test({
 	}
 })
 
-// TEST DETERMINE-VALUE
+// ### TEST DETERMINE-VALUE
 
 // Test determine-value function for an out-of-the-money option (OTM)
 Clarinet.test({
@@ -483,7 +483,7 @@ Clarinet.test({
 	}
 })
 
-// TEST CREATE-SETTLEMENT-POOL
+// ### TEST CREATE-SETTLEMENT-POOL
 
 // Test create-settlement-pool for OTM
 Clarinet.test({
@@ -570,7 +570,164 @@ Clarinet.test({
 	}
 })
 
-// TEST SET-TRUSTED-ORACLE
+// ### TEST UPDATE-VAULT-LEDGER
+
+// Test update-vault-ledger OTM --> total-balances goes up, by mint amount
+Clarinet.test({
+	name: "Ensure that update-vault-ledger (out-of-the-money) increases total-balances",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		const inTheMoneyStrikePrice = shiftPriceValue(redstoneDataOneMinApart[0].value * testInTheMoneyStrikePriceMultiplier)
+		const lastestStxusdRate = shiftPriceValue(redstoneDataOneMinApart[5].value)
+		const expectedOptionsPnlUSD = lastestStxusdRate - inTheMoneyStrikePrice
+
+		let block = simulateTwoDepositsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Initialize the first auction; the strike price is in-the-money (below spot)
+		block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		assertEquals(block.receipts.length, 2);
+
+		// const premiumOne = Number(block.receipts[0].events[0].stx_transfer_event.amount)
+		// const premiumTwo = Number(block.receipts[1].events[0].stx_transfer_event.amount)
+
+		// console.log("premiumOne", premiumOne)
+		// console.log("premiumTwo", premiumTwo)
+
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		const totalBalancesNew = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		const totalBalanceNewNum = Number(totalBalancesNew.result.slice(1))
+		const totalBalanceNum = Number(totalBalances.result.slice(1))
+
+		// console.log("totalBalanceNewNum", totalBalanceNewNum)
+		// console.log("totalBalanceNum", totalBalanceNum)
+		assertEquals(totalBalanceNewNum > totalBalanceNum, true)
+		// assertEquals(totalBalanceNewNum, totalBalanceNum + premiumOne + premiumTwo)
+	}
+})
+
+// Test update-vault-ledger ITM --> total-balances goes down, goes down by settlement-pool
+Clarinet.test({
+	name: "Ensure that update-vault-ledger (in-the-money) decreases total-balances",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		const inTheMoneyStrikePrice = shiftPriceValue(redstoneDataOneMinApart[0].value * testInTheMoneyStrikePriceMultiplier)
+		const lastestStxusdRate = shiftPriceValue(redstoneDataOneMinApart[5].value)
+		const expectedOptionsPnlUSD = lastestStxusdRate - inTheMoneyStrikePrice
+
+		let block = simulateTwoDepositsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Initialize the first auction; the strike price is in-the-money (below spot)
+		block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'inTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		assertEquals(block.receipts.length, 2);
+
+		// const premiumOne = Number(block.receipts[0].events[0].stx_transfer_event.amount)
+		// const premiumTwo = Number(block.receipts[1].events[0].stx_transfer_event.amount)
+
+		// console.log("premiumOne", premiumOne)
+		// console.log("premiumTwo", premiumTwo)
+
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		const totalBalancesNew = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		const totalBalanceNewNum = Number(totalBalancesNew.result.slice(1))
+		const totalBalanceNum = Number(totalBalances.result.slice(1))
+
+		// console.log("totalBalancesNew", Number(totalBalancesNew.result.slice(1)))
+		// console.log("totalBalances", Number(totalBalances.result.slice(1)))
+		assertEquals(totalBalanceNewNum < totalBalanceNum, true)
+		// assertEquals(Number(totalBalancesNew.result.slice(1)), Number(totalBalances.result.slice(1)) + mintAmountOne + mintAmountTwo)
+	}
+})
+
+// TODO Add test for case 2: ITM where total premium > settlement-pool, totalBalanceNew > totalBalance 
+// --> needs a strike price less than 2% below stxusd-rate.
+
+// ### TEST DISTRIBUTE-PNL
+
+// TODO: Helper function for retrieving investor-balance?
+// TODO: Test distribute-pnl OTM --> investor-balance for accountA goes up
+// TODO: Test distribute-pnl ITM --> investor-balance for acccountB goes down
+
+// ### TEST PROCESS-DEPOSITS
+
+// Helper function: deposit wihtout processing
+// TODO: Test process-deposits OTM --> total-pending-deposits to zero
+// TODO: Test process-deposits OTM --> investor-balance for goes up AND investor-pending-deposits goes to zero
+
+// ### TEST PROCESS-WITHDRAWALS
+ 
+// Helper queue-withdrawal
+// TODO: Test process-withdrawals OTM --> total-balances goes up (with withdrwal being more than the premium payment)
+// TODO: Test process-withdrawals OTM --> STX transfer
+
+
+
+
+
+// ### TEST SET-TRUSTED-ORACLE
 
 // Testing setting trusted oracle
 Clarinet.test({
@@ -587,7 +744,7 @@ Clarinet.test({
 	},
 });
 
-// TEST RECOVER-SIGNER
+// ### TEST RECOVER-SIGNER
 
 // Testing recover-signer - price package is signed by the same pubkey on every call
 Clarinet.test({
