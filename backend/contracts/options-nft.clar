@@ -577,6 +577,6 @@
 )
 
 ;; Helper function for process-deposits
-(define-public (process-deposits-from-options) 
+(define-public (process-deposits-from-options) ;; TODO: REname process-deposits-from-options-nft-contract
 	(as-contract (contract-call? .vault process-deposits))
 )

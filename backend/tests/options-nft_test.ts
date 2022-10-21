@@ -415,14 +415,14 @@ Clarinet.test({
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
 		block.receipts[0].result.expectOk().expectBool(true);
 
-		// We read the options-pnl from the on-chain ledger
+		// We read the options-pnl from the vault ledger
 		const optionsPnlSTXFromLedger = chain.callReadOnlyFn(
 			"options-nft",
 			"get-option-pnl-for-expiry",
 			[types.uint(testCycleExpiry)],
 			deployer.address
 		)
-		// And compare the on-chain ledger entry to the number we would expect from our input values
+		// And compare the vault ledger entry to the number we would expect from our input values
 		assertEquals(
 			optionsPnlSTXFromLedger.result.expectOk().expectSome(), 
 			types.uint(Math.floor(expectedOptionsPnlUSD / lastestStxusdRate * 1000000))
@@ -566,7 +566,11 @@ Clarinet.test({
 			[],
 			deployer.address
 		)
-		assertEquals(totalSettlementPool.result, types.uint(Math.floor(expectedOptionsPnlUSD / lastestStxusdRate * 1000000) * 2))
+
+		assertEquals(
+			totalSettlementPool.result, 
+			types.uint(Math.floor(expectedOptionsPnlUSD / lastestStxusdRate * 1000000) * 2)
+		)
 	}
 })
 
@@ -591,7 +595,7 @@ Clarinet.test({
 		)
 		assertEquals(totalBalances.result, types.uint(3000000))
 
-		// Initialize the first auction; the strike price is in-the-money (below spot)
+		// Initialize the first auction; the strike price is out-of-the-money (above spot)
 		block = initFirstAuction(
 			chain, 
 			deployer.address,
@@ -707,24 +711,177 @@ Clarinet.test({
 
 // ### TEST DISTRIBUTE-PNL
 
-// TODO: Helper function for retrieving investor-balance?
-// TODO: Test distribute-pnl OTM --> investor-balance for accountA goes up
-// TODO: Test distribute-pnl ITM --> investor-balance for acccountB goes down
+// Test distribute-pnl OTM --> investor-balance for accountA goes up
+Clarinet.test({
+	name: "Ensure that distribute-pnl (out-of-the-money) increases the investor's account balance",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		let block = simulateTwoDepositsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Read investor A's balance in the vault ledger after the deposit has been processed
+		const investorABalance = chain.callReadOnlyFn(
+			"vault",
+			"get-investor-balance",
+			[types.principal(accountA.address)],
+			deployer.address
+		)
+
+		// Initialize the first auction; the strike price is out-of-the-money (above spot)
+		block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		assertEquals(block.receipts.length, 2);
+
+		const premiumOne = Number(block.receipts[0].events[0].stx_transfer_event.amount)
+		const premiumTwo = Number(block.receipts[1].events[0].stx_transfer_event.amount)
+
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		// Read investor A's new balance after the positive pnl has been distributed to the two investors
+		const investorABalanceNew = chain.callReadOnlyFn(
+			"vault",
+			"get-investor-balance",
+			[types.principal(accountA.address)],
+			deployer.address
+		)
+		
+		// Convert the balances from Clarity uint type to a Javascript number
+		const investorABalanceNewNum = Number(investorABalanceNew.result.expectSome().slice(1))
+		const investorABalanceNum = Number(investorABalance.result.expectSome().slice(1))
+
+		// Check if the new balance after the PNL distribution is higher than the one before
+		assertEquals(investorABalanceNewNum > investorABalanceNum, true)
+		// Check if the right amount has been distributed to investor A
+		// Since he deposited 1 STX and the total vault balance is 3 STX, he should receive 1/3rd of the profit
+		assertEquals(
+			investorABalanceNewNum, 
+			investorABalanceNum + Math.floor(((premiumOne + premiumTwo) / 3))
+		)
+	}
+})
+
+// Test distribute-pnl ITM --> investor-balance for acccountA goes down
+Clarinet.test({
+	name: "Ensure that distribute-pnl (in-the-money) decreases the investor's account balance",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		let block = simulateTwoDepositsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Read investor A's balance in the vault ledger after the deposit has been processed
+		const investorABalance = chain.callReadOnlyFn(
+			"vault",
+			"get-investor-balance",
+			[types.principal(accountA.address)],
+			deployer.address
+		)
+
+		// Initialize the first auction; the strike price is in-the-money (below spot)
+		block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'inTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		assertEquals(block.receipts.length, 2);
+
+		// Convert the premium payments from the mint transaction to JS numbers
+		const premiumOne = Number(block.receipts[0].events[0].stx_transfer_event.amount);
+		const premiumTwo = Number(block.receipts[1].events[0].stx_transfer_event.amount);
+		const premiumTotal = premiumOne + premiumTwo;
+
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5]);
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		// Read investor A's new balance after the positive pnl has been distributed to the two investors
+		const investorABalanceNew = chain.callReadOnlyFn(
+			"vault",
+			"get-investor-balance",
+			[types.principal(accountA.address)],
+			deployer.address
+		);
+
+		// Read the options-pnl from the vault ledger
+		const optionsPnlSTXFromLedger = chain.callReadOnlyFn(
+			"options-nft",
+			"get-option-pnl-for-expiry",
+			[types.uint(testCycleExpiry)],
+			deployer.address
+		);
+		// Convert option-pnl to JS number
+		const optionsPnlSTXFromLedgerNum = Number(optionsPnlSTXFromLedger.result.expectOk().expectSome().slice(1));
+		
+		// Convert the balances from Clarity uint type to a Javascript number
+		const investorABalanceNewNum = Number(investorABalanceNew.result.expectSome().slice(1));
+		const investorABalanceNum = Number(investorABalance.result.expectSome().slice(1));
+
+		// Check if the new balance after the PNL distribution is LOWER than the one before
+		assertEquals(investorABalanceNewNum < investorABalanceNum, true);
+		
+		// Check if the right amount has been distributed to investor A
+		// Since he deposited 1 STX and the total vault balance is 3 STX, he should incur 1/3rd of the loss
+		// We add a third of the premiumTotal because investor A is still entitled to 1/3rd of the proceeds from selling the NFTs
+		assertEquals(
+			investorABalanceNewNum, 
+			Math.floor(investorABalanceNum + premiumTotal / 3 - (optionsPnlSTXFromLedgerNum * 2  / 3))
+		);
+	}
+})
 
 // ### TEST PROCESS-DEPOSITS
 
 // Helper function: deposit wihtout processing
 // TODO: Test process-deposits OTM --> total-pending-deposits to zero
-// TODO: Test process-deposits OTM --> investor-balance for goes up AND investor-pending-deposits goes to zero
+// TODO: Test process-deposits OTM --> investor-balance for investorA goes up AND investor-pending-deposits goes to zero
 
 // ### TEST PROCESS-WITHDRAWALS
  
 // Helper queue-withdrawal
 // TODO: Test process-withdrawals OTM --> total-balances goes up (with withdrwal being more than the premium payment)
 // TODO: Test process-withdrawals OTM --> STX transfer
-
-
-
 
 
 // ### TEST SET-TRUSTED-ORACLE
@@ -746,41 +903,42 @@ Clarinet.test({
 
 // ### TEST RECOVER-SIGNER
 
+// TODO: UNCOMMENT
 // Testing recover-signer - price package is signed by the same pubkey on every call
-Clarinet.test({
-    name: "Ensure that the price package is signed by the same pubkey on every call",
-    async fn(chain: Chain, accounts: Map<string, Account>) {
+// Clarinet.test({
+//     name: "Ensure that the price package is signed by the same pubkey on every call",
+//     async fn(chain: Chain, accounts: Map<string, Account>) {
 
-		const wallet_1 = accounts.get('wallet_1')!.address;
+// 		const wallet_1 = accounts.get('wallet_1')!.address;
 
-		let redstone_response = { timestamp: 0, liteEvmSignature: "", value: 0 }
-		await axiod.get("https://api.redstone.finance/prices?symbol=STX&provider=redstone").then((response) => {
-				redstone_response = response.data[0]
-		});
+// 		let redstone_response = { timestamp: 0, liteEvmSignature: "", value: 0 }
+// 		await axiod.get("https://api.redstone.finance/prices?symbol=STX&provider=redstone").then((response) => {
+// 				redstone_response = response.data[0]
+// 		});
 
-		const pricePackage: PricePackage = {
-			timestamp: redstone_response.timestamp,
-			prices: [{ symbol: "STX", value: redstone_response.value }]
-		}
-		const packageCV = pricePackageToCV(pricePackage);
+// 		const pricePackage: PricePackage = {
+// 			timestamp: redstone_response.timestamp,
+// 			prices: [{ symbol: "STX", value: redstone_response.value }]
+// 		}
+// 		const packageCV = pricePackageToCV(pricePackage);
 
-		let block = chain.mineBlock([
-			Tx.contractCall("options-nft", "recover-signer", [
-				packageCV.timestamp,
-				packageCV.prices,
-				types.buff(liteSignatureToStacksSignature(redstone_response.liteEvmSignature))
-			], wallet_1)
-		]);
+// 		let block = chain.mineBlock([
+// 			Tx.contractCall("options-nft", "recover-signer", [
+// 				packageCV.timestamp,
+// 				packageCV.prices,
+// 				types.buff(liteSignatureToStacksSignature(redstone_response.liteEvmSignature))
+// 			], wallet_1)
+// 		]);
 
-		const signer = block.receipts[0].result.expectOk()
+// 		const signer = block.receipts[0].result.expectOk()
 		
-		const isTrusted = chain.callReadOnlyFn(
-			"options-nft",
-			"is-trusted-oracle",
-			[signer],
-			wallet_1
-		)
+// 		const isTrusted = chain.callReadOnlyFn(
+// 			"options-nft",
+// 			"is-trusted-oracle",
+// 			[signer],
+// 			wallet_1
+// 		)
 
-    assertEquals(isTrusted.result, "true")
-    },
-});
+//     assertEquals(isTrusted.result, "true")
+//     },
+// });
