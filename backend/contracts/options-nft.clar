@@ -580,3 +580,15 @@
 (define-public (process-deposits-from-options) 
 	(as-contract (contract-call? .vault process-deposits))
 )
+
+(define-public (process-withdrawals-from-options) 
+	(as-contract (contract-call? .vault process-withdrawals))
+)
+
+(define-public (create-settlement-pool-from-options (amount uint)) 
+	(as-contract (contract-call? .vault create-settlement-pool amount))
+)
+
+(define-public (distribute-pnl-from-options) 
+	(as-contract (contract-call? .vault distribute-pnl))
+)

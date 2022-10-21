@@ -99,7 +99,7 @@ Clarinet.test({
 
         block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
-            Tx.contractCall("vault", "process-withdrawals", [], wallet_1)
+            Tx.contractCall("options-nft", "process-withdrawals-from-options", [], wallet_1)
         ])
         block.receipts[0].result.expectOk()
         block.receipts[1].events.expectSTXTransferEvent(1000000, vaultContract, wallet_1)
@@ -130,7 +130,7 @@ Clarinet.test({
 
         block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [ types.uint(1000000) ], wallet_1),
-            Tx.contractCall("vault", "process-withdrawals", [], deployer),
+            Tx.contractCall("options-nft", "process-withdrawals-from-options", [], deployer),
         ])
 
         // user 1 has withdrawn their whole account already, expect they are not in ledger
@@ -152,7 +152,7 @@ Clarinet.test({
         block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
-            Tx.contractCall("vault", "process-withdrawals", [], wallet_1),
+            Tx.contractCall("options-nft", "process-withdrawals-from-options", [], wallet_1),
         ])
 
         // TODO find out why result of get-ledger-entry is just a number, not a whole object with pending etc
@@ -205,14 +205,14 @@ Clarinet.test({
                 wallet_1
             ),
             Tx.contractCall(
-                'vault',
-                'process-deposits',
+                'options-nft',
+                'process-deposits-from-options',
                 [],
                 deployer
             ),
             Tx.contractCall(
-                "vault", 
-                "distribute-pnl",
+                "options-nft", 
+                "distribute-pnl-from-options",
                 [], 
                 deployer
             )
@@ -267,14 +267,14 @@ Clarinet.test({
                 wallet_1
             ),
             Tx.contractCall(
-                'vault',
-                'process-deposits',
+                'options-nft',
+                'process-deposits-from-options',
                 [],
                 deployer
             ),
             Tx.contractCall(
-                'vault',
-                'create-settlement-pool',
+                'options-nft',
+                'create-settlement-pool-from-options',
                 [ types.uint(300000) ],
                 deployer
             )
@@ -282,8 +282,8 @@ Clarinet.test({
 
         block = chain.mineBlock([
             Tx.contractCall(
-                "vault", 
-                "distribute-pnl",
+                "options-nft", 
+                "distribute-pnl-from-options",
                 [], 
                 deployer
             )
@@ -338,14 +338,14 @@ Clarinet.test({
                 wallet_1
             ),
             Tx.contractCall(
-                'vault',
-                'process-deposits',
+                'options-nft',
+                'process-deposits-from-options',
                 [],
                 deployer
             ),
             Tx.contractCall(
-                'vault',
-                'create-settlement-pool',
+                'options-nft',
+                'create-settlement-pool-from-options',
                 [ types.uint(700000) ],
                 deployer
             )
@@ -353,8 +353,8 @@ Clarinet.test({
 
         block = chain.mineBlock([
             Tx.contractCall(
-                "vault", 
-                "distribute-pnl",
+                "options-nft", 
+                "distribute-pnl-from-options",
                 [], 
                 deployer
             )
@@ -392,8 +392,8 @@ Clarinet.test({
 
         block = chain.mineBlock([
             Tx.contractCall(
-                'vault',
-                'create-settlement-pool',
+                'options-nft',
+                'create-settlement-pool-from-options',
                 [ types.uint(500000) ],
                 deployer
             )
@@ -432,14 +432,14 @@ Clarinet.test({
                 wallet_1
             ),
             Tx.contractCall(
-                'vault',
-                'process-deposits',
+                'options-nft',
+                'process-deposits-from-options',
                 [],
                 deployer
             ),
             Tx.contractCall(
-                'vault',
-                'create-settlement-pool',
+                'options-nft',
+                'create-settlement-pool-from-options',
                 [ types.uint(700000) ],
                 deployer
             )
@@ -453,14 +453,14 @@ Clarinet.test({
                 wallet_1
             ),
             Tx.contractCall(
-                "vault", 
-                "distribute-pnl",
+                "options-nft", 
+                "distribute-pnl-from-options",
                 [], 
                 deployer
             ),
             Tx.contractCall(
-                "vault", 
-                "process-withdrawals",
+                "options-nft", 
+                "process-withdrawals-from-options",
                 [], 
                 deployer
             )
@@ -499,8 +499,8 @@ Clarinet.test({
 
         block = chain.mineBlock([
             Tx.contractCall(
-                'vault',
-                'create-settlement-pool',
+                'options-nft',
+                'create-settlement-pool-from-options',
                 [ types.uint(0) ],
                 deployer
             )
@@ -534,7 +534,7 @@ Clarinet.test({
 });
 
 Clarinet.test({
-    name: "Ensure that the vault cannot deposit premium o itself",
+    name: "Ensure that the vault cannot deposit premium to itself",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
         const vault = `${deployer}.vault`;
@@ -584,8 +584,8 @@ Clarinet.test({
 
         block = chain.mineBlock([
             Tx.contractCall(
-                'vault',
-                'create-settlement-pool',
+                'options-nft',
+                'create-settlement-pool-from-options',
                 [ types.uint(1000000) ],
                 deployer
             ),
