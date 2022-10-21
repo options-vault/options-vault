@@ -18,6 +18,7 @@ const untrustedOraclePubkey = "0x03cd2cfdbd2ad9332828a7a13ef62cb999e063421c708e8
 const firstRedstoneTimestamp = redstoneDataOneMinApart[0].timestamp; // timestamp 1/10
 const midRedstoneTimestamp = redstoneDataOneMinApart[4].timestamp; // timestamp 5/10
 const lastRedstoneTimestamp = redstoneDataOneMinApart[9].timestamp; // timestamp 10/10
+const minuteInMilliseconds = 60000;
 const weekInMilliseconds = 604800000;
 
 // Testing constants
@@ -159,7 +160,7 @@ Clarinet.test({
 
 // Testing submit-price-data (before expiry)
 Clarinet.test({
-	name: "Ensure that anyone can submit price data signed by trusted oracles before the current-cycle-expiry data",
+	name: "Ensure that anyone can submit price data signed by trusted oracles BEFORE the current-cycle-expiry data",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 
@@ -202,7 +203,7 @@ Clarinet.test({
 
 // Testing submit-price-data (after expiry)
 Clarinet.test({
-	name: "Ensure that anyone can submit price data signed by trusted oracles after the current-cycle-expiry data",
+	name: "Ensure that anyone can submit price data signed by trusted oracles AFTER the current-cycle-expiry data",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 
@@ -249,7 +250,7 @@ Clarinet.test({
 
 // Test transition-to-next-cycle function for an out-of-the-money option
 Clarinet.test({
-	name: "Ensure that the transition-to-next-cycle function works for an out-of-the-money option",
+	name: "Ensure that the transition-to-next-cycle (out-of-the-money) correctly sets the next cycles expiry",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 		
@@ -279,7 +280,7 @@ Clarinet.test({
 
 // Test transition-to-next-cycle function for an in-the-money option
 Clarinet.test({
-	name: "Ensure that the end-current-cycle function works for an in-the-money option",
+	name: "Ensure that transition-to-next-cycle (in-the-money) correctly sets the option-pnl",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 
@@ -320,14 +321,14 @@ Clarinet.test({
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
 		block.receipts[0].result.expectOk().expectBool(true);
 
-		// We read the options-pnl from the on-chain ledger
+		// We read the options-pnl from the vault ledger
 		const optionsPnlSTXFromLedger = chain.callReadOnlyFn(
 			"options-nft",
 			"get-option-pnl-for-expiry",
 			[types.uint(testCycleExpiry)],
 			deployer.address
 		)
-		// And compare the on-chain ledger entry to the number we would expect from our input values
+		// And compare the vault ledger entry to the number we would expect from our input values
 		assertEquals(
 			optionsPnlSTXFromLedger.result.expectOk().expectSome(), 
 			types.uint(Math.floor(expectedOptionsPnlUSD / lastestStxusdRate * 1000000))
@@ -339,7 +340,7 @@ Clarinet.test({
 
 // Test determine-value function for an out-of-the-money option (OTM)
 Clarinet.test({
-	name: "Ensure that the determine-value function works for an out-of-the-money option",
+	name: "Ensure that determine-value (out-of-the-money) correctly sets option-pnl to zero",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 		
@@ -374,7 +375,7 @@ Clarinet.test({
 
 // Test determine-value function for an in-the-money option (ITM)
 Clarinet.test({
-	name: "Ensure that the determine-value function works for an in-the-money option",
+	name: "Ensure that determine-value (in-the-money option) correctly sets option-pnl",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 
@@ -432,7 +433,7 @@ Clarinet.test({
 
 // Test that add-to-options-ledger-list (called by determin-value) correctly adds the expired cycle's information to the list
 Clarinet.test({
-	name: "Ensure that add-to-options-ledger-list (called by determin-value) correctly adds the expired cycle's information to the list",
+	name: "Ensure that add-to-options-ledger-list (called by determine-value) correctly adds expired cycle's information to the options-ledgerlist",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 
@@ -487,7 +488,7 @@ Clarinet.test({
 
 // Test create-settlement-pool for OTM
 Clarinet.test({
-	name: "Ensure that the create-settlement-pool function works for an out-of-the-money option",
+	name: "Ensure that create-settlement-pool (out-of-the-money) does NOT create a settlement-pool",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 		
@@ -518,7 +519,7 @@ Clarinet.test({
 
 // Test create-settlment-pool for ITM
 Clarinet.test({
-	name: "Ensure that the create-settlement-pool function works for an in-the-money option",
+	name: "Ensure that create-settlement-pool (in-the-money) correctly creates a settlement-pool",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 
@@ -578,7 +579,7 @@ Clarinet.test({
 
 // Test update-vault-ledger OTM --> total-balances goes up, by mint amount
 Clarinet.test({
-	name: "Ensure that update-vault-ledger (out-of-the-money) increases total-balances",
+	name: "Ensure that update-vault-ledger (out-of-the-money) correclty increases total-balances",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 
@@ -643,7 +644,7 @@ Clarinet.test({
 
 // Test update-vault-ledger ITM --> total-balances goes down, goes down by settlement-pool
 Clarinet.test({
-	name: "Ensure that update-vault-ledger (in-the-money) decreases total-balances",
+	name: "Ensure that update-vault-ledger (in-the-money) correctly decreases total-balances",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 
@@ -885,7 +886,7 @@ Clarinet.test({
 
 // ### TEST UPDATE-OPTIONS-LEDGER
 
-// TODO: Test update-options-ledger OTM --> entry for next-cycle expiry exists, strike set correctly, first-token-id 3, option-pnl none
+// Test update-options-ledger OTM --> entry for next-cycle expiry exists, strike set correctly, first-token-id 3, option-pnl none
 Clarinet.test({
 	name: "Ensure that update-options-ledger (out-of-the-money) correctly sets a new entry in the options-ledger",
 	fn(chain: Chain, accounts: Map<string, Account>) {
@@ -941,7 +942,7 @@ Clarinet.test({
 	}
 })
 
-// TODO: Test update-options-ledger ITM --> entry for next-cycle expiry exists, strike not eq to zero, first-token-id 3, option-pnl none
+// Test update-options-ledger ITM --> entry for next-cycle expiry exists, strike not eq to zero, first-token-id 3, option-pnl none
 Clarinet.test({
 	name: "Ensure that update-options-ledger (in-the-money) correctly sets a new entry in the options-ledger",
 	fn(chain: Chain, accounts: Map<string, Account>) {
@@ -996,6 +997,144 @@ Clarinet.test({
 		optionsLedgerEntry.result.expectOk().expectTuple()["option-pnl"].expectNone()
 	}
 })
+
+// ### TEST INIT-AUCTION
+
+// Test init-auction (OTM) --> sets auction-start-time to expiry + 120min, sets options-for-sale to 3, sets auction-decrement-value to 2% of options-price-in-usd
+Clarinet.test({
+	name: "Ensure that init-auction (out-of-the-money) correctly initializes a new auction",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		let block = simulateTwoDepositsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Initialize the first auction; the strike price is out-of-the-money (above spot)
+		block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		assertEquals(block.receipts.length, 2);
+
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		const expectedAuctionStartTime = testCycleExpiry + 120 * minuteInMilliseconds
+
+		// Check auction start time
+		const newAuctionStartTime = chain.callReadOnlyFn(
+			"options-nft",
+			"get-auction-start-time",
+			[],
+			deployer.address
+		)
+		assertEquals(newAuctionStartTime.result, types.uint(expectedAuctionStartTime))
+
+		// Check auction-decrement-value
+		const newAuctionDecrementVaule = chain.callReadOnlyFn(
+			"options-nft",
+			"get-auction-decrement-value",
+			[],
+			deployer.address
+		)
+
+		const newOptionsPriceInUSD = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-price-in-usd",
+			[],
+			deployer.address
+		)
+		const newOptionsPriceInUSDNum = Number(newOptionsPriceInUSD.result.expectSome().slice(1))
+		assertEquals(newAuctionDecrementVaule.result, types.uint(newOptionsPriceInUSDNum * 0.02))
+
+		// Check options-for-sale
+		const optionsForSale = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-for-sale",
+			[],
+			deployer.address
+		)
+
+		const totalBalancesNew = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		const totalBalancesNewNum = Number(totalBalancesNew.result.slice(1))
+		assertEquals(optionsForSale.result, types.uint(Math.floor(totalBalancesNewNum / 1000000)))
+	}
+})
+
+// ### TEST SET-OPTIONS-PRICE
+
+// Test set-options-price --> sets options-price-in-usd to 0.5% of the stxusd-rate
+Clarinet.test({
+	name: "Ensure that set-options-price (out-of-the-money) correctly sets options-price-in-usd to 2% of the stxusd-rate",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		// Initialize the first auction; the strike price is out-of-the-money (above spot)
+		let block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		// Check that the options-price-in-usd was set to 0.5% of the stxusd-rate provided to the contract
+		const newOptionsPriceInUSD = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-price-in-usd",
+			[],
+			deployer.address
+		)
+		const newOptionsPriceInUSDNum = Number(newOptionsPriceInUSD.result.expectSome().slice(1))
+		assertEquals(newOptionsPriceInUSDNum, shiftPriceValue(redstoneDataOneMinApart[5].value) * 0.005)
+
+	}
+})
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 // ### TEST SET-TRUSTED-ORACLE

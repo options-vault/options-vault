@@ -497,6 +497,10 @@
 	(var-get auction-start-time)
 )
 
+(define-read-only (get-auction-decrement-value) 
+	(var-get auction-decrement-value)
+)
+
 ;; current-cycle-expiry
 ;; #[allow(unchecked_data)]
 (define-public (set-current-cycle-expiry (timestamp uint)) 
