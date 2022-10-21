@@ -114,8 +114,8 @@ Clarinet.test({
         let block = simulateTwoDepositsAndProcess(chain, accounts)
 
         // expect wallet 1 has 1 stack, wallet 2 has 2 in ledger
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_1) ], wallet_1).result.expectSome().expectUint(1000000);
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_2) ], wallet_2).result.expectSome().expectUint(2000000);
+        chain.callReadOnlyFn("vault", "get-investor-balance", [ types.principal(wallet_1) ], wallet_1).result.expectSome().expectUint(1000000);
+        chain.callReadOnlyFn("vault", "get-investor-balance", [ types.principal(wallet_2) ], wallet_2).result.expectSome().expectUint(2000000);
 
 }})
 
@@ -134,10 +134,10 @@ Clarinet.test({
         ])
 
         // user 1 has withdrawn their whole account already, expect they are not in ledger
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_1) ], wallet_1).result.expectNone();
+        chain.callReadOnlyFn("vault", "get-investor-balance", [ types.principal(wallet_1) ], wallet_1).result.expectNone();
 
         // but user 2 still has their 2 stacks
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_2) ], wallet_2).result.expectSome().expectUint(2000000);
+        chain.callReadOnlyFn("vault", "get-investor-balance", [ types.principal(wallet_2) ], wallet_2).result.expectSome().expectUint(2000000);
 }})
 
 Clarinet.test({
@@ -155,13 +155,11 @@ Clarinet.test({
             Tx.contractCall("options-nft", "process-withdrawals-from-options", [], wallet_1),
         ])
 
-        // TODO find out why result of get-ledger-entry is just a number, not a whole object with pending etc
-
         // user 1 has withdrawn their whole account already, expect they are not in ledger
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_1) ], wallet_1).result.expectNone();
+        chain.callReadOnlyFn("vault", "get-investor-balance", [ types.principal(wallet_1) ], wallet_1).result.expectNone();
 
         // but user 2 still has 1 stack left
-        chain.callReadOnlyFn("vault", "get-ledger-entry", [ types.principal(wallet_2) ], wallet_2).result.expectSome().expectUint(1000000);
+        chain.callReadOnlyFn("vault", "get-investor-balance", [ types.principal(wallet_2) ], wallet_2).result.expectSome().expectUint(1000000);
 
         // total-balances has to equals to u1000000 or 1 STX
         chain.callReadOnlyFn('vault', 'get-total-balances', [], deployer).result.expectUint(1000000);
@@ -220,14 +218,14 @@ Clarinet.test({
    
         chain.callReadOnlyFn(
             "vault", 
-            "get-ledger-entry", 
+            "get-investor-balance", 
             [ types.principal(wallet_1) ], 
             wallet_1
         ).result.expectSome().expectUint(2250000);
 
         chain.callReadOnlyFn(
             "vault", 
-            "get-ledger-entry", 
+            "get-investor-balance", 
             [ types.principal(wallet_2) ], 
             wallet_2
         ).result.expectSome().expectUint(2250000);
@@ -291,14 +289,14 @@ Clarinet.test({
 
         chain.callReadOnlyFn(
             "vault", 
-            "get-ledger-entry", 
+            "get-investor-balance", 
             [ types.principal(wallet_1) ], 
             wallet_1
         ).result.expectSome().expectUint(2100000);
 
         chain.callReadOnlyFn(
             "vault", 
-            "get-ledger-entry", 
+            "get-investor-balance", 
             [ types.principal(wallet_2) ], 
             wallet_2
         ).result.expectSome().expectUint(2100000);
@@ -362,14 +360,14 @@ Clarinet.test({
 
         chain.callReadOnlyFn(
             "vault", 
-            "get-ledger-entry", 
+            "get-investor-balance", 
             [ types.principal(wallet_1) ], 
             wallet_1
         ).result.expectSome().expectUint(1900000);
 
         chain.callReadOnlyFn(
             "vault", 
-            "get-ledger-entry", 
+            "get-investor-balance", 
             [ types.principal(wallet_2) ], 
             wallet_2
         ).result.expectSome().expectUint(1900000);
@@ -401,7 +399,7 @@ Clarinet.test({
         // checks if the create-settlement-pool works
         chain.callReadOnlyFn(
             "vault", 
-            "get-settlement-pool", 
+            "get-total-settlement-pool", 
             [], 
             deployer
         ).result.expectUint(500000);
@@ -468,14 +466,14 @@ Clarinet.test({
         
         chain.callReadOnlyFn(
             "vault", 
-            "get-ledger-entry", 
+            "get-investor-balance", 
             [ types.principal(wallet_1) ], 
             wallet_1
         ).result.expectNone();
 
         chain.callReadOnlyFn(
             "vault", 
-            "get-ledger-entry", 
+            "get-investor-balance", 
             [ types.principal(wallet_2) ], 
             wallet_2
         ).result.expectSome().expectUint(1900000);
@@ -599,7 +597,7 @@ Clarinet.test({
 
         chain.callReadOnlyFn(
             "vault", 
-            "get-settlement-pool", 
+            "get-total-settlement-pool", 
             [], 
             deployer
         ).result.expectUint(500000);
@@ -689,6 +687,3 @@ Clarinet.test({
         block.receipts[1].result.expectErr().expectUint(100);
     }
 });
-// Test deposit-premium
-// Test distribute-pnl
-// Test create-settlement-pool
