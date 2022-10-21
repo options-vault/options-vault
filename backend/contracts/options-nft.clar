@@ -497,6 +497,10 @@
 	(var-get auction-start-time)
 )
 
+(define-read-only (get-auction-decrement-value) 
+	(var-get auction-decrement-value)
+)
+
 ;; current-cycle-expiry
 ;; #[allow(unchecked_data)]
 (define-public (set-current-cycle-expiry (timestamp uint)) 
@@ -576,8 +580,9 @@
 	(contract-call? .redstone-verify recover-signer timestamp entries signature)
 )
 
-;; Helper functions for vault testing
-(define-public (process-deposits-from-options) 
+;; Helper function for process-deposits
+(define-public (process-deposits-from-options) ;; TODO: Rename process-deposits-from-options-nft-contract
+
 	(as-contract (contract-call? .vault process-deposits))
 )
 

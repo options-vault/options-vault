@@ -348,3 +348,7 @@
 (define-read-only (get-total-settlement-pool) 
   (var-get total-settlement-pool)
 )
+
+(define-read-only (get-investor-balance (investor principal)) 
+  (get balance (map-get? ledger investor))
+)
