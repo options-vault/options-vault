@@ -5,7 +5,6 @@ authors = []
 telemetry = false
 cache_dir = '.cache'
 requirements = []
-
 [contracts.options-nft]
 path = 'contracts/options-nft.clar'
 clarity_version = 1
