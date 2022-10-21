@@ -73,6 +73,24 @@ export function setTrustedOracle(chain: Chain, senderAddress: string): Block {
 	]);
 }
 
+// Sets current-cycle-expiry to the provided timestamp
+export function setCurrentCycleExpiry(
+  chain: Chain,
+  deployerAddress: string,
+  cycleExpiry: number,
+  ): Block {
+    let block = chain.mineBlock([
+      // sets current-cycle-expiry to the provided timestamp
+      Tx.contractCall(
+        "options-nft", 
+        "set-current-cycle-expiry", 
+        [types.uint(cycleExpiry)], 
+        deployerAddress
+      )
+    ]);
+    block.receipts[0].result.expectOk()
+    return block;
+}
 
 // Creates two depositors for wallet_1 (1 STX) and wallet_2 (2 STX)
 export function simulateTwoDeposits(chain: Chain, accounts: Map<string, Account>) {
@@ -104,7 +122,8 @@ export function simulateTwoDepositsAndProcess(chain: Chain, accounts: Map<string
 export function submitPriceData(
   chain: Chain,
   submitterAddress: string,
-  redstoneDataPoint: RedstoneData): Block 
+  redstoneDataPoint: RedstoneData
+  ): Block 
   {
 
     const { timestamp, price, signature } = convertRedstoneToContractData(redstoneDataPoint)
@@ -172,23 +191,7 @@ export function submitPriceDataAndTest(
     return block;
 }
 
-// Sets current-cycle-expiry to the provided timestamp
-export function setCurrentCycleExpiry(
-  chain: Chain,
-  deployerAddress: string,
-  cycleExpiry: number,
-  ): Block {
-    let block = chain.mineBlock([
-      // sets current-cycle-expiry to the provided timestamp
-      Tx.contractCall(
-        "options-nft", 
-        "set-current-cycle-expiry", 
-        [types.uint(cycleExpiry)], 
-        deployerAddress
-      )
-    ]);
-    return block;
-}
+
 
 // TODO: set auction-decrement-value
 // TODO: take out set-current-cycle-expiry call and refactor options-nft tests

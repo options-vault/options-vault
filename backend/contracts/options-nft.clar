@@ -22,6 +22,7 @@
 (define-constant ERR_READING_STXUSD_RATE (err u125))
 (define-constant ERR_NO_OPTION_PNL_AVAILABLE (err u126))
 (define-constant ERR_INIT_AUCTION (err u127))
+(define-constant ERR_PNL_DISTRIBUTION (err u128))
 
 (define-constant CONTRACT_ADDRESS (as-contract tx-sender))
 (define-data-var contract-owner principal tx-sender)
@@ -149,7 +150,7 @@
 		)
 		(if (> option-pnl u0) 
 			;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
-			(try! (contract-call? .vault create-settlement-pool (usd-to-stx (* option-pnl options-minted-amount) stxusd-rate))) ;; #2: total-settlement-pool > 0 
+			(try! (contract-call? .vault create-settlement-pool (* option-pnl options-minted-amount))) ;; #2: total-settlement-pool > 0 
 			true
 		)
 		(ok true)
@@ -160,7 +161,7 @@
 ;;                        to represents the option-pnl as well as the intra-cycle deposits and withdrawals.
 (define-private (update-vault-ledger) 
 	(begin 
-		(try! (contract-call? .vault distribute-pnl))
+		(unwrap! (contract-call? .vault distribute-pnl) ERR_PNL_DISTRIBUTION)
 		(unwrap! (contract-call? .vault process-deposits) ERR_PROCESS_DEPOSITS)
 		(unwrap! (contract-call? .vault process-withdrawals) ERR_PROCESS_WITHDRAWALS)
 		(ok true)

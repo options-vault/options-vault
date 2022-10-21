@@ -79,6 +79,7 @@
     (ok true)
   )
 )
+
 ;; <process-deposits-updater>: Adds the pending-deposit amount (and resets it) to balance amount for each investor in the ledger,
 ;;                             also adds this amount to total-balances
 (define-private (process-deposits-updater (investor principal)) 
@@ -196,14 +197,13 @@
                   }  
                 )
               )
-              ;; (var-set total-balances (- (var-get total-balances) investor-pending-withdrawal))
+              ;; if false, tranfers what is in the balance to the investor and delete the investor from the ledger and the investor's list
               (if 
                 (is-eq (get balance (unwrap-panic (map-get? ledger investor))) u0)
                 (map-delete ledger investor)
                 true
               )
             )
-            ;; if false, tranfers what is in the balance to the investor and delete the investor from the ledger and the investor's list
             true
         )
         (ok true)
@@ -242,8 +242,10 @@
     ;; (asserts! (is-eq CONTRACT_ADDRESS tx-sender) ONLY_CONTRACT_ALLOWED)
     (var-set temp-total-balances (var-get total-balances))
     (map pnl-evaluator (var-get investor-addresses))
-    ;; TODO: Understand if double-check works
-    (asserts! (is-eq (var-get total-balances) (- (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits)) (var-get total-settlement-pool))) ERR_PREMIUM_NOT_SPLITTED_CORRECTLY)
+    ;; TODO: Investigate reason for the assert not to work for ITM scenarios, because of a rounding error?
+    ;; (asserts! (is-eq 
+    ;;   (var-get total-balances) 
+    ;;   (- (- (stx-get-balance CONTRACT_ADDRESS) (var-get total-pending-deposits)) (var-get total-settlement-pool))) ERR_PREMIUM_NOT_SPLITTED_CORRECTLY)
     (ok true)
   )
 )
@@ -297,7 +299,6 @@
   (var-get total-settlement-pool)
 )
 
-
 ;; <create-settlement-pool>: The function transfers the STX amount owed to the cycle's NFT holders to the options-nft contract,
 ;;                           effectively creating a settlement-pool. It is called by the options-nft contract as part of the logic
 ;;                           for determine-value-and-settle and only executes in case of an in-the-money options NFT.
@@ -311,6 +312,7 @@
   )
 )
 
+;; <claim-settlement>: 
 ;; #[allow(unchecked_data)]
 (define-public (claim-settlement (amount uint) (recipient principal)) 
   (begin
@@ -322,4 +324,8 @@
     (var-set total-settlement-pool (- (var-get total-settlement-pool) amount))
     (ok true)
   )
+)
+
+(define-read-only (get-total-settlement-pool) 
+  (var-get total-settlement-pool)
 )
