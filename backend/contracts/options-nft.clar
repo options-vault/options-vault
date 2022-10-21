@@ -580,3 +580,19 @@
 (define-public (process-deposits-from-options) ;; TODO: REname process-deposits-from-options-nft-contract
 	(as-contract (contract-call? .vault process-deposits))
 )
+
+(define-public (process-withdrawals-from-options) 
+	(as-contract (contract-call? .vault process-withdrawals))
+)
+
+(define-public (create-settlement-pool-from-options (amount uint)) 
+	(as-contract (contract-call? .vault create-settlement-pool amount))
+)
+
+(define-public (distribute-pnl-from-options) 
+	(as-contract (contract-call? .vault distribute-pnl))
+)
+
+(define-public (claim-settlement-from-options (amount uint) (recipient principal)) 
+	(as-contract (contract-call? .vault claim-settlement amount recipient))
+)
