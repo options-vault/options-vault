@@ -26,7 +26,7 @@ Clarinet.test({
         block.receipts[1].events.expectSTXTransferEvent(2000000, wallet_2, vaultContract)
         block.receipts[2].result.expectOk();
 
-        // total-balances has to equals to u1000000 or 1 STX
+
         chain.callReadOnlyFn('vault', 'get-total-balances', [], deployer).result.expectUint(3000000);
     },
 });

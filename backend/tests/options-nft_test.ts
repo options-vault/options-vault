@@ -883,6 +883,120 @@ Clarinet.test({
 // TODO: Test process-withdrawals OTM --> total-balances goes up (with withdrwal being more than the premium payment)
 // TODO: Test process-withdrawals OTM --> STX transfer
 
+// ### TEST UPDATE-OPTIONS-LEDGER
+
+// TODO: Test update-options-ledger OTM --> entry for next-cycle expiry exists, strike set correctly, first-token-id 3, option-pnl none
+Clarinet.test({
+	name: "Ensure that update-options-ledger (out-of-the-money) correctly sets a new entry in the options-ledger",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		// Initialize the first auction; the strike price is out-of-the-money (above spot)
+		let block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		assertEquals(block.receipts.length, 2);
+
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		const testNextCycleExpiry = testCycleExpiry + weekInMilliseconds
+
+		// get options-ledger entry
+		const optionsLedgerEntry = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-ledger-entry",
+			[types.uint(testNextCycleExpiry)],
+			deployer.address
+		)
+		
+		// Check if value is a tuple
+		optionsLedgerEntry.result.expectOk().expectTuple()
+		// check that strike is set correctly
+		assertEquals(
+			optionsLedgerEntry.result.expectOk().expectTuple().strike, 
+			types.uint(shiftPriceValue(redstoneDataOneMinApart[5].value) * testOutOfTheMoneyStrikePriceMultiplier)
+		)
+		// check that first-token-id is 3
+		assertEquals(optionsLedgerEntry.result.expectOk().expectTuple()["first-token-id"], types.uint(3))
+		// check that first-token-id is 3
+		assertEquals(optionsLedgerEntry.result.expectOk().expectTuple()["last-token-id"], types.uint(3))
+		// check that option-pnl is none
+		optionsLedgerEntry.result.expectOk().expectTuple()["option-pnl"].expectNone()
+	}
+})
+
+// TODO: Test update-options-ledger ITM --> entry for next-cycle expiry exists, strike not eq to zero, first-token-id 3, option-pnl none
+Clarinet.test({
+	name: "Ensure that update-options-ledger (in-the-money) correctly sets a new entry in the options-ledger",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		// Initialize the first auction; the strike price is out-of-the-money (above spot)
+		let block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'inTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		assertEquals(block.receipts.length, 2);
+
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		const testNextCycleExpiry = testCycleExpiry + weekInMilliseconds
+
+		// get options-ledger entry
+		const optionsLedgerEntry = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-ledger-entry",
+			[types.uint(testNextCycleExpiry)],
+			deployer.address
+		)
+		
+		// Check if value is a tuple
+		optionsLedgerEntry.result.expectOk().expectTuple()
+		// check that strike is set correctly
+		assertEquals(
+			optionsLedgerEntry.result.expectOk().expectTuple().strike, 
+			types.uint(shiftPriceValue(redstoneDataOneMinApart[5].value) * testOutOfTheMoneyStrikePriceMultiplier)
+		)
+		// check that first-token-id is 3
+		assertEquals(optionsLedgerEntry.result.expectOk().expectTuple()["first-token-id"], types.uint(3))
+		// check that first-token-id is 3
+		assertEquals(optionsLedgerEntry.result.expectOk().expectTuple()["last-token-id"], types.uint(3))
+		// check that option-pnl is none
+		optionsLedgerEntry.result.expectOk().expectTuple()["option-pnl"].expectNone()
+	}
+})
+
 
 // ### TEST SET-TRUSTED-ORACLE
 
