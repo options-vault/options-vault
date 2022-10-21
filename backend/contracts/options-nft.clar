@@ -576,7 +576,7 @@
 	(contract-call? .redstone-verify recover-signer timestamp entries signature)
 )
 
-;; Helper function for process-deposits
+;; Helper functions for vault testing
 (define-public (process-deposits-from-options) 
 	(as-contract (contract-call? .vault process-deposits))
 )
