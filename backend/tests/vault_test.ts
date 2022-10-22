@@ -26,61 +26,57 @@ Clarinet.test({
         block.receipts[1].events.expectSTXTransferEvent(2000000, wallet_2, vaultContract)
         block.receipts[2].result.expectOk();
 
-
         chain.callReadOnlyFn('vault', 'get-total-balances', [], deployer).result.expectUint(3000000);
     },
 });
 
 Clarinet.test({
-    name: "Ensure that non user cannot withdraw",
+    name: "Ensure that a user that has not deposited can not withdraw",
     fn(chain: Chain, accounts: Map<string, Account>) {
 		const wallet_3 = accounts.get('wallet_3')!.address;
 
-        let block = simulateTwoDepositsAndProcess(chain, accounts)
+        simulateTwoDepositsAndProcess(chain, accounts)
 
-        block = chain.mineBlock([
+        const block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_3),
         ])
-
-        // ERR TX_SENDER_NOT_IN_LEDGER
         block.receipts[0].result.expectErr().expectUint(errorCodes.ERR_TX_SENDER_NOT_IN_LEDGER)
 }})
 
 Clarinet.test({
-    name: "Ensure that user can withdraw their whole account",
+    name: "Ensure that a depositor can withdraw their whole balance",
     fn(chain: Chain, accounts: Map<string, Account>) {
 		const wallet_1 = accounts.get('wallet_1')!.address;
 
-        let block = simulateTwoDepositsAndProcess(chain, accounts)
+        simulateTwoDepositsAndProcess(chain, accounts)
 
-        block = chain.mineBlock([
+        const block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
         ])
-
         block.receipts[0].result.expectOk()
 }})
 
 Clarinet.test({
-    name: "Ensure that user can withdraw part of their account",
+    name: "Ensure that a depositor can withdraw a part of their balance",
     fn(chain: Chain, accounts: Map<string, Account>) {
 		const wallet_2 = accounts.get('wallet_2')!.address;
 
-        let block = simulateTwoDepositsAndProcess(chain, accounts)
+        simulateTwoDepositsAndProcess(chain, accounts)
 
-        block = chain.mineBlock([
+        const block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
-        ])
+        ])  
         block.receipts[0].result.expectOk()
 }})
 
 Clarinet.test({
-    name: "Ensure that user cannot withdraw more than their accounts worth of stacks",
+    name: "Ensure that a depositor can not withdraw more than their balance",
     fn(chain: Chain, accounts: Map<string, Account>) {
 		const wallet_2 = accounts.get('wallet_2')!.address;
 
-        let block = simulateTwoDepositsAndProcess(chain, accounts)
+        simulateTwoDepositsAndProcess(chain, accounts)
 
-        block = chain.mineBlock([
+        const block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(2000001)], wallet_2),
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(2000000)], wallet_2),
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1)], wallet_2)
@@ -92,12 +88,13 @@ Clarinet.test({
 }})
 
 Clarinet.test({
-    name: "Ensure that pending withdrawals are actualised correctly",
+    name: "Ensure that pending withdrawals are processed correctly",
     fn(chain: Chain, accounts: Map<string, Account>) {
 		const wallet_1 = accounts.get('wallet_1')!.address;
-        let block = simulateTwoDepositsAndProcess(chain, accounts)
+        
+        simulateTwoDepositsAndProcess(chain, accounts)
 
-        block = chain.mineBlock([
+        const block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
             Tx.contractCall("options-nft", "process-withdrawals-from-options", [], wallet_1)
         ])
@@ -106,12 +103,12 @@ Clarinet.test({
 }})
 
 Clarinet.test({
-    name: "Ensure that ledger entry is set correctly during deposits",
+    name: "Ensure that the ledger entry is set correctly during deposits",
     fn(chain: Chain, accounts: Map<string, Account>) {
 		const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
 
-        let block = simulateTwoDepositsAndProcess(chain, accounts)
+        simulateTwoDepositsAndProcess(chain, accounts)
 
         // expect wallet 1 has 1 stack, wallet 2 has 2 in ledger
         chain.callReadOnlyFn("vault", "get-investor-balance", [ types.principal(wallet_1) ], wallet_1).result.expectSome().expectUint(1000000);
@@ -120,15 +117,15 @@ Clarinet.test({
 }})
 
 Clarinet.test({
-    name: "Ensure that ledger entry is set correctly during withdrawals",
+    name: "Ensure that the ledger entry is set correctly during withdrawals",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
 
-        let block = simulateTwoDepositsAndProcess(chain, accounts);
+        simulateTwoDepositsAndProcess(chain, accounts);
 
-        block = chain.mineBlock([
+        let block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [ types.uint(1000000) ], wallet_1),
             Tx.contractCall("options-nft", "process-withdrawals-from-options", [], deployer),
         ])
@@ -141,15 +138,15 @@ Clarinet.test({
 }})
 
 Clarinet.test({
-    name: "Ensure that the two users can queue withdrawal on same block as process withdrawals",
+    name: "Ensure that the two users can queue withdrawals on the same block as process-withdrawals is executed",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
 
-        let block = simulateTwoDepositsAndProcess(chain, accounts)
+        simulateTwoDepositsAndProcess(chain, accounts)
 
-        block = chain.mineBlock([
+        const block = chain.mineBlock([
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_1),
             Tx.contractCall("vault", "queue-withdrawal", [types.uint(1000000)], wallet_2),
             Tx.contractCall("options-nft", "process-withdrawals-from-options", [], wallet_1),
@@ -167,7 +164,7 @@ Clarinet.test({
 
 
 Clarinet.test({
-    name: "Ensure that deposit must be valid amount",
+    name: "Ensure that deposits must have a valid amount",
     fn(chain: Chain, accounts: Map<string, Account>) {
 		const wallet_1 = accounts.get('wallet_1')!.address;
 
@@ -180,16 +177,16 @@ Clarinet.test({
 }})
 
 Clarinet.test({
-    name: "Ensure that distribute-pnl function adds the correct yield to each investor's balance if the pnl is 0",
+    name: "Ensure that distribute-pnl correctly adds the premium from selling options-nfts to each investor's balance if the pnl is zero",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
         const wallet_3 = accounts.get('wallet_3')!.address;
 
-        let block = simulateTwoDepositsAndProcess(chain, accounts);
+        simulateTwoDepositsAndProcess(chain, accounts);
 
-        block = chain.mineBlock([
+        const block = chain.mineBlock([
             Tx.contractCall(
                 'vault',
                 'deposit-premium',
@@ -249,9 +246,9 @@ Clarinet.test({
         const vault = `${deployer}.vault`;
         const optionsNft = `${deployer}.options-nft`;
 
-        let block = simulateTwoDepositsAndProcess(chain, accounts);
+        simulateTwoDepositsAndProcess(chain, accounts);
 
-        block = chain.mineBlock([
+        let block = chain.mineBlock([
             Tx.contractCall(
                 'vault',
                 'deposit-premium',
@@ -311,7 +308,7 @@ Clarinet.test({
 })
 
 Clarinet.test({
-    name: "Ensure that distribute-pnl function subtracts the correct amount to each investor's balance if there is pnl for case 3 (user 1 losses and user 2 receives yield)",
+    name: "Ensure that distribute-pnl function subtracts the correct amount from each investor's balance if there is pnl for case 3 (user 1 incurs loss and user 2 receives yield)",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
@@ -320,9 +317,9 @@ Clarinet.test({
         const vault = `${deployer}.vault`;
         const optionsNft = `${deployer}.options-nft`;
 
-        let block = simulateTwoDepositsAndProcess(chain, accounts);
+        simulateTwoDepositsAndProcess(chain, accounts);
 
-        block = chain.mineBlock([
+        let block = chain.mineBlock([
             Tx.contractCall(
                 'vault',
                 'deposit-premium',
@@ -382,13 +379,13 @@ Clarinet.test({
 })
 
 Clarinet.test({
-    name: "Ensure that create-settlement-pool function sets the amount sent to total-settlement-pool var",
+    name: "Ensure that create-settlement-pool correctly sets the amount sent to total-settlement-pool",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
 
-		let block = simulateTwoDepositsAndProcess(chain, accounts);
+		simulateTwoDepositsAndProcess(chain, accounts);
 
-        block = chain.mineBlock([
+        const block = chain.mineBlock([
             Tx.contractCall(
                 'options-nft',
                 'create-settlement-pool-from-options',
@@ -407,16 +404,16 @@ Clarinet.test({
 })
 
 Clarinet.test({
-    name: "Ensure to withdraw just the balance amount if there is less than the pending withdrawal amount after distributing pnl",
+    name: "Ensure that  process-withdrawals only withdrawas the balance amount in case pending-withdrawal is less than the investor's balance after distributing pnl has run",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
 		const wallet_2 = accounts.get('wallet_2')!.address;
         const wallet_3 = accounts.get('wallet_3')!.address;
 
-        let block = simulateTwoDepositsAndProcess(chain, accounts);
+        simulateTwoDepositsAndProcess(chain, accounts);
 
-        block = chain.mineBlock([
+        let block = chain.mineBlock([
             Tx.contractCall(
                 'vault',
                 'deposit-premium',
@@ -488,14 +485,14 @@ Clarinet.test({
 });
 
 Clarinet.test({
-    name: "Ensure that create-settlement-pool function only accepts valid amounts",
+    name: "Ensure that create-settlement-pool only accepts valid amounts",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
         const optionsNft = `${deployer}.options-nft`;
 
-		let block = simulateTwoDepositsAndProcess(chain, accounts);
+		simulateTwoDepositsAndProcess(chain, accounts);
 
-        block = chain.mineBlock([
+        const block = chain.mineBlock([
             Tx.contractCall(
                 'options-nft',
                 'create-settlement-pool-from-options',
@@ -552,7 +549,7 @@ Clarinet.test({
 });
 
 Clarinet.test({
-    name: "Ensure that the vault only accepts valid amounts for depositing premium",
+    name: "Ensure that deposit-premium only accepts valid amounts",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
@@ -572,15 +569,15 @@ Clarinet.test({
 });
 
 Clarinet.test({
-    name: "Ensure that the vault transfers settlement amount to the user requested",
+    name: "Ensure that the vault transfers settlement amount to the user who claims it",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
         const vault = `${deployer}.vault`;
 
-        let block = simulateTwoDepositsAndProcess(chain, accounts);
+        simulateTwoDepositsAndProcess(chain, accounts);
 
-        block = chain.mineBlock([
+        const block = chain.mineBlock([
             Tx.contractCall(
                 'options-nft',
                 'create-settlement-pool-from-options',
@@ -602,19 +599,19 @@ Clarinet.test({
             deployer
         ).result.expectUint(500000);
 
-        // checks if the claim was successfuly made
+        // checks if claim was successful
         block.receipts[1].events.expectSTXTransferEvent(500000, vault, wallet_1);
     }
 });
 
 Clarinet.test({
-    name: "Ensure that the vault crashes when trying to transfer settlement amount to the user requested if there is not enough balance in the vault",
+    name: "Ensure that the vault does NOT make a transfer when a settlement transaction tries to transfer more than the vault balance",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
         const vault = `${deployer}.vault`;
 
-        let block = chain.mineBlock([
+        const block = chain.mineBlock([
             Tx.contractCall(
                 'options-nft',
                 'create-settlement-pool-from-options',
@@ -629,19 +626,18 @@ Clarinet.test({
             )
         ])
 
-        // checks if the claim crashes
+        // checks if claim crashes
         block.receipts[1].result.expectErr().expectUint(108);
     }
 });
 
 Clarinet.test({
-    name: "Ensure that the vault crashes when trying to transfer settlement amount to the user requested if there is not enough balance in the settlement-pool",
+    name: "Ensure that the vault does NOT make a transfer when a settlement transaction tries to transfer more than the settlement-pool balance",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
-        const vault = `${deployer}.vault`;
 
-        let block = chain.mineBlock([
+        const block = chain.mineBlock([
             Tx.contractCall(
                 'options-nft',
                 'create-settlement-pool-from-options',
@@ -656,19 +652,18 @@ Clarinet.test({
             )
         ])
         
-        // checks if the claim crashes
+        // checks if claim crashes
         block.receipts[1].result.expectErr().expectUint(107);
     }
 });
 
 Clarinet.test({
-    name: "Ensure that claim function from vault just work with valid amounts",
+    name: "Ensure that claim only works with valid amounts",
     fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get('deployer')!.address;
         const wallet_1 = accounts.get('wallet_1')!.address;
-        const vault = `${deployer}.vault`;
 
-        let block = chain.mineBlock([
+        const block = chain.mineBlock([
             Tx.contractCall(
                 'options-nft',
                 'create-settlement-pool-from-options',
@@ -683,7 +678,7 @@ Clarinet.test({
             )
         ])
         
-        // checks if the claim crashes
+        // checks if claim crashes
         block.receipts[1].result.expectErr().expectUint(100);
     }
 });
