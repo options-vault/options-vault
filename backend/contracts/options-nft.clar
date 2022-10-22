@@ -3,6 +3,8 @@
 ;; SIP009 NFT trait on mainnet
 ;; (impl-trait 'SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.nft-trait.nft-trait)
 
+;; constants
+
 (define-constant ERR_NOT_CONTRACT_OWNER (err u110))
 (define-constant ERR_UNTRUSTED_ORACLE (err u111))
 (define-constant ERR_STALE_RATE (err u112))
@@ -16,13 +18,19 @@
 (define-constant ERR_READING_STXUSD_RATE (err u120))
 (define-constant ERR_INIT_AUCTION (err u121))
 
+(define-constant symbol-stx 0x535458) ;; "STX" as a buff
+(define-constant stacks-base u1000000)
+
+(define-constant week-in-milliseconds u604800000)
+(define-constant min-in-milliseconds u60000)
+
+;; data maps and vars
+
 (define-data-var contract-owner principal tx-sender)
 
 (define-non-fungible-token options-nft uint)
 (define-data-var token-id-nonce uint u0)
 
-(define-constant symbol-stx 0x535458) ;; "STX" as a buff
-(define-constant stacks-base u1000000)
 ;; A map of all trusted oracles, indexed by their 33 byte compressed public key.
 (define-map trusted-oracles (buff 33) bool)
 ;; 0x3009....298 is redstone
@@ -34,8 +42,7 @@
 
 ;; The unix millisecond timestamp of the expiry date of the current cycle
 (define-data-var current-cycle-expiry uint u1666972800000) ;; set to Fri Oct 28 2022 16:00:00 GMT+0000
-(define-constant week-in-milliseconds u604800000)
-(define-constant min-in-milliseconds u60000)
+
 
 ;; A map that holds the relevant data points for each batch of options issued by the contract
 (define-map options-ledger 

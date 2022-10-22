@@ -8,9 +8,10 @@ const errorCodes = {
     ERR_VAULT_NOT_ALLOWED : 101,
     ERR_INSUFFICIENT_FUNDS : 102,
     ERR_TX_SENDER_NOT_IN_LEDGER : 103,
-    ERR_ONLY_CONTRACT_ALLOWED : 104,
-    ERR_TX_NOT_APPLIED_YET : 105,
-    ERR_PREMIUM_NOT_SPLITTED_CORRECTLY : 106,
+    ERR_ONLY_NFT_CONTRACT_ALLOWED : 104,
+    ERR_TX_NOT_APPLIED_YET: 105,
+    ERR_SETTLEMENT_POOL_NOT_ENOUGH: 106,
+    ERR_PREMIUM_NOT_SPLITTED_CORRECTLY : 107,
 }
 
 Clarinet.test({
@@ -626,7 +627,7 @@ Clarinet.test({
         ])
 
         // checks if claim crashes
-        block.receipts[1].result.expectErr().expectUint(108);
+        block.receipts[1].result.expectErr().expectUint(107);
     }
 });
 
@@ -652,7 +653,7 @@ Clarinet.test({
         ])
         
         // checks if claim crashes
-        block.receipts[1].result.expectErr().expectUint(107);
+        block.receipts[1].result.expectErr().expectUint(106);
     }
 });
 
