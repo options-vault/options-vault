@@ -191,8 +191,6 @@ export function submitPriceDataAndTest(
     return block;
 }
 
-
-
 // TODO: set auction-decrement-value
 // TODO: take out set-current-cycle-expiry call and refactor options-nft tests
 export function initFirstAuction(
