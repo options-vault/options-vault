@@ -1107,7 +1107,7 @@ Clarinet.test({
 	}
 });
 
-// Test mint for ERR_AUCTION_CLOSED (u118)
+// Test mint for ERR_AUCTION_CLOSED (u117)
 Clarinet.test({
 	name: "Ensure that mint (out-of-the-money) produces ERR_AUCTION_CLOSED if called outside the auction window",
 	fn(chain: Chain, accounts: Map<string, Account>) {
@@ -1151,7 +1151,7 @@ Clarinet.test({
         accountA.address
       )
 		])
-		block.receipts[0].result.expectErr().expectUint(118);
+		block.receipts[0].result.expectErr().expectUint(117);
 
 		// Change the auction-start-time to 240 min in the FUTURE --> now it is closed
 		block = chain.mineBlock([
@@ -1183,11 +1183,11 @@ Clarinet.test({
         accountA.address
       )
 		])
-		block.receipts[0].result.expectErr().expectUint(118);
+		block.receipts[0].result.expectErr().expectUint(117);
 	}
 });
 
-// Test mint for ERR_OPTIONS_SOLD_OUT (u119)
+// Test mint for ERR_OPTIONS_SOLD_OUT (u118)
 Clarinet.test({
 	name: "Ensure that mint (out-of-the-money) produces ERR_OPTIONS_SOLD_OUT if a user tries to buy more options than available",
 	fn(chain: Chain, accounts: Map<string, Account>) {
@@ -1260,8 +1260,8 @@ Clarinet.test({
         accountA.address
       )
 		])
-		// Expect the 4th contract call to the mint function to return (err u119)
-		block.receipts[optionsForSaleNum].result.expectErr().expectUint(119)
+		// Expect the 4th contract call to the mint function to return (err u118)
+		block.receipts[optionsForSaleNum].result.expectErr().expectUint(118)
 	}
 });
 
