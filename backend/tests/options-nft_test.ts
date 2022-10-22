@@ -1,6 +1,6 @@
 
 import { Clarinet, Tx, Chain, Account, types, assertEquals, stringToUint8Array, shiftPriceValue, liteSignatureToStacksSignature, pricePackageToCV } from "./deps.ts";
-import type { PricePackage, Block } from "./deps.ts";
+import { PricePackage, Block } from "./deps.ts";
 import axiod from "https://deno.land/x/axiod@0.26.2/mod.ts";
 import { redstoneDataOneMinApart } from "./redstone-data.ts";
 import { PriceDataForContract, simulateTwoDepositsAndProcess, simulateTwoDeposits, initFirstAuction, initMint, setTrustedOracle, submitPriceData, 
@@ -98,65 +98,8 @@ Clarinet.test({
 	},
 });
 
-// ### TEST MINT
-
-// Testing mint function
-Clarinet.test({
-	name: "Ensure that the mint function works for the right inputs",
-	fn(chain: Chain, accounts: Map<string, Account>) {
-		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
-		let block = initFirstAuction(
-			chain, 
-			deployer.address,
-			testAuctionStartTime, 
-			testCycleExpiry,  
-			'outOfTheMoney', 
-			redstoneDataOneMinApart
-		);		
-		
-		block = initMint(
-			chain, 
-			accountA.address, 
-			accountB.address, 
-			redstoneDataOneMinApart
-		)
-
-		const stxPriceA = chain.callReadOnlyFn(
-			"options-nft",
-			"usd-to-stx",
-			[
-				types.uint(shiftPriceValue(testOptionsUsdPricingMultiplier * redstoneDataOneMinApart[0].value)),
-				types.uint(shiftPriceValue(redstoneDataOneMinApart[0].value))
-			],
-			deployer.address
-		)
-		assertEquals(stxPriceA.result, types.uint(20000))
-
-		const stxPriceB = chain.callReadOnlyFn(
-			"options-nft",
-			"usd-to-stx",
-			[
-				types.uint(shiftPriceValue(testOptionsUsdPricingMultiplier * redstoneDataOneMinApart[0].value)),
-				types.uint(shiftPriceValue(redstoneDataOneMinApart[1].value))
-			],
-			deployer.address
-		)
-		assertEquals(stxPriceB.result, types.uint(20132))
-
-		assertEquals(block.receipts.length, 2);
-		// TODO Refactor to use expectNonFungibleTokenMintEvent()
-		block.receipts[0].result.expectOk().expectUint(1)
-		block.receipts[0].events.expectSTXTransferEvent(20000, accountA.address, vaultContract)
-		// block.receipts[0].events.expectNonFungibleTokenMintEvent(types.uint(1), accountA.address, contractOwner, '.options-nft')
-		assertEquals(block.receipts[0].events[1].type, "nft_mint_event")
-
-		block.receipts[1].result.expectOk().expectUint(2)
-		block.receipts[1].events.expectSTXTransferEvent(20132, accountB.address, vaultContract)
-		assertEquals(block.receipts[1].events[1].type, "nft_mint_event")
-	},
-});
-
 // ### TEST SUBMIT PRICE DATA
+// TODO: Test for ERR_UNTRUSTED_ORACLE (u111) and ERR_STALE_RATE (u112)
 
 // Testing submit-price-data (before expiry)
 Clarinet.test({
@@ -1122,14 +1065,262 @@ Clarinet.test({
 	}
 })
 
+// ### TEST MINT
 
+// Testing mint for correct inputs --> expects STX Transfer and Mint event
+Clarinet.test({
+	name: "Ensure that mint (out-of-the-money) properly works for the correct inputs",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+		let block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);		
+		
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
 
+		const stxPriceA = chain.callReadOnlyFn(
+			"options-nft",
+			"usd-to-stx",
+			[
+				types.uint(shiftPriceValue(testOptionsUsdPricingMultiplier * redstoneDataOneMinApart[0].value)),
+				types.uint(shiftPriceValue(redstoneDataOneMinApart[0].value))
+			],
+			deployer.address
+		)
+		assertEquals(stxPriceA.result, types.uint(20000))
 
+		const stxPriceB = chain.callReadOnlyFn(
+			"options-nft",
+			"usd-to-stx",
+			[
+				types.uint(shiftPriceValue(testOptionsUsdPricingMultiplier * redstoneDataOneMinApart[0].value)),
+				types.uint(shiftPriceValue(redstoneDataOneMinApart[1].value))
+			],
+			deployer.address
+		)
+		assertEquals(stxPriceB.result, types.uint(20132))
 
+		assertEquals(block.receipts.length, 2);
+		// TODO Refactor to use expectNonFungibleTokenMintEvent()
+		block.receipts[0].result.expectOk().expectUint(1)
+		block.receipts[0].events.expectSTXTransferEvent(20000, accountA.address, vaultContract)
+		// block.receipts[0].events.expectNonFungibleTokenMintEvent(types.uint(1), accountA.address, contractOwner, '.options-nft')
+		assertEquals(block.receipts[0].events[1].type, "nft_mint_event")
 
+		block.receipts[1].result.expectOk().expectUint(2)
+		block.receipts[1].events.expectSTXTransferEvent(20132, accountB.address, vaultContract)
+		assertEquals(block.receipts[1].events[1].type, "nft_mint_event")
+	},
+});
 
+// Test mint for ERR_UNTRUSTED_ORACLE (u111)
+Clarinet.test({
+	name: "Ensure that mint (out-of-the-money) produces ERR_UNTRUSTED_ORACLE if called with untrusted data",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+		let block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
 
+		// Corrupt the signed price data by subtracting 0.1 USD from the price 
+		const corruptedPriceData = redstoneDataOneMinApart[0].value - 0.1
 
+		const pricePackage: PricePackage = {
+			timestamp: redstoneDataOneMinApart[0].timestamp,
+			prices: [{ symbol: "STX", value: corruptedPriceData }]
+		}
+		const packageCV = pricePackageToCV(pricePackage)
+		const signature = types.buff(liteSignatureToStacksSignature(redstoneDataOneMinApart[0].liteEvmSignature))
+
+		block = chain.mineBlock([
+      Tx.contractCall(
+        "options-nft",
+        "mint",
+        [
+          packageCV.timestamp,
+          packageCV.prices,
+          signature	
+        ],
+        accountA.address
+      )
+		])
+		block.receipts[0].result.expectErr(111);
+	}
+});
+
+// Test mint for ERR_AUCTION_CLOSED (u118)
+Clarinet.test({
+	name: "Ensure that mint (out-of-the-money) produces ERR_AUCTION_CLOSED if called outside the auction window",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+		let block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+
+		const pricePackage: PricePackage = {
+			timestamp: redstoneDataOneMinApart[0].timestamp,
+			prices: [{ symbol: "STX", value: redstoneDataOneMinApart[0].value }]
+		}
+		const packageCV = pricePackageToCV(pricePackage)
+		const signature = types.buff(liteSignatureToStacksSignature(redstoneDataOneMinApart[1].liteEvmSignature))
+
+		// Change the auction-start-time to 240 min in the PAST --> now it is closed
+		block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft",
+				"set-auction-start-time",
+				[types.uint(redstoneDataOneMinApart[1].timestamp - 240 * minuteInMilliseconds)],
+				deployer.address
+			)
+		])
+
+		block = chain.mineBlock([
+      Tx.contractCall(
+        "options-nft",
+        "mint",
+        [
+          packageCV.timestamp,
+          packageCV.prices,
+          signature	
+        ],
+        accountA.address
+      )
+		])
+		block.receipts[0].result.expectErr(118);
+
+		// Change the auction-start-time to 240 min in the FUTURE --> now it is closed
+		block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft",
+				"set-auction-start-time",
+				[types.uint(redstoneDataOneMinApart[1].timestamp + 240 * minuteInMilliseconds)],
+				deployer.address
+			)
+		])
+
+		const auctionStartTimeFuture = chain.callReadOnlyFn(
+			"options-nft",
+			"get-auction-start-time",
+			[],
+			deployer.address
+		)
+		assertEquals(auctionStartTimeFuture.result, types.uint(redstoneDataOneMinApart[1].timestamp + 240 * minuteInMilliseconds))
+
+		block = chain.mineBlock([
+      Tx.contractCall(
+        "options-nft",
+        "mint",
+        [
+          packageCV.timestamp,
+          packageCV.prices,
+          signature	
+        ],
+        accountA.address
+      )
+		])
+		block.receipts[0].result.expectErr(118);
+	}
+});
+
+// Test mint for ERR_OPTIONS_SOLD_OUT (u119)
+Clarinet.test({
+	name: "Ensure that mint (out-of-the-money) produces ERR_OPTIONS_SOLD_OUT if a user tries to buy more options than available",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+		
+		let block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+
+		const optionsForSale = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-for-sale",
+			[],
+			deployer.address
+		)
+
+		const optionsForSaleNum = Number(optionsForSale.result.slice(1))
+
+		const pricePackage: PricePackage = {
+			timestamp: redstoneDataOneMinApart[0].timestamp,
+			prices: [{ symbol: "STX", value: redstoneDataOneMinApart[0].value }]
+		}
+		const packageCV = pricePackageToCV(pricePackage)
+		const signature = types.buff(liteSignatureToStacksSignature(redstoneDataOneMinApart[0].liteEvmSignature))
+
+		block = chain.mineBlock([
+      Tx.contractCall(
+        "options-nft",
+        "mint",
+        [
+          packageCV.timestamp,
+          packageCV.prices,
+          signature	
+        ],
+        accountA.address
+      ),
+			Tx.contractCall(
+        "options-nft",
+        "mint",
+        [
+          packageCV.timestamp,
+          packageCV.prices,
+          signature	
+        ],
+        accountA.address
+      ),
+			Tx.contractCall(
+        "options-nft",
+        "mint",
+        [
+          packageCV.timestamp,
+          packageCV.prices,
+          signature	
+        ],
+        accountA.address
+      ),
+			Tx.contractCall(
+        "options-nft",
+        "mint",
+        [
+          packageCV.timestamp,
+          packageCV.prices,
+          signature	
+        ],
+        accountA.address
+      )
+		])
+		// After the 3 available NFTs have been minted, expect the call after that to produce (err u119)
+		block.receipts[optionsForSaleNum].result.expectErr(119)
+	}
+});
+
+// Test mint for ERR_UPDATE_PRICE_FAILED (u124) ?
 
 
 

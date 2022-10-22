@@ -17,7 +17,6 @@
 (define-constant ERR_TOKEN_ID_NOT_IN_EXPIRY_RANGE (err u120)) ;; TODO: Still needed?
 (define-constant ERR_PROCESS_DEPOSITS (err u121))
 (define-constant ERR_PROCESS_WITHDRAWALS (err u122))
-(define-constant ERR_RETRIEVING_STXUSD_PRICE_DATA (err u123))
 (define-constant ERR_UPDATE_PRICE_FAILED (err u124))
 (define-constant ERR_READING_STXUSD_RATE (err u125))
 (define-constant ERR_NO_OPTION_PNL_AVAILABLE (err u126))
@@ -319,7 +318,7 @@
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
 			(token-id (+ (var-get token-id-nonce) u1))
       (current-cycle-options-ledger-entry (try! (get-options-ledger-entry (var-get current-cycle-expiry))))
-			(stxusd-rate (unwrap! (get value (element-at (filter is-stx entries) u0)) ERR_RETRIEVING_STXUSD_PRICE_DATA))
+			(stxusd-rate (unwrap-panic (get value (element-at (filter is-stx entries) u0))))
 		)
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
 		;; Check if an options-nft is available for sale. The contract can only sell as many options-nfts as there are funds in the vault
@@ -336,6 +335,8 @@
 		(try! (contract-call? .vault deposit-premium (try! (get-update-latest-price-in-stx timestamp stxusd-rate)) tx-sender))
 		;; Mint the options NFT
 		(try! (nft-mint? options-nft token-id tx-sender))
+		;; Reduce the options-for-sale variable by 1
+		(var-set options-for-sale (- (var-get options-for-sale) u1))
 		;; Update last-token-id in the options-ledger with the token-id of the minted NFT
 		(map-set options-ledger
 			{ cycle-expiry: (var-get current-cycle-expiry) } 
