@@ -3,7 +3,6 @@
 ;; SIP009 NFT trait on mainnet
 ;; (impl-trait 'SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.nft-trait.nft-trait)
 
-;; TODO: Clean up error codes
 (define-constant ERR_NOT_CONTRACT_OWNER (err u110))
 (define-constant ERR_UNTRUSTED_ORACLE (err u111))
 (define-constant ERR_STALE_RATE (err u112))
@@ -29,12 +28,12 @@
 ;; 0x3009....298 is redstone
 (map-set trusted-oracles 0x03009dd87eb41d96ce8ad94aa22ea8b0ba4ac20c45e42f71726d6b180f93c3f298 true)
 
+;; Last seen timestamp. The if clause is so that the contract can deploy on a Clarinet console session.
 (define-data-var last-seen-timestamp uint (if (> block-height u0) (get-last-block-timestamp) u0))
 (define-data-var last-stxusd-rate (optional uint) none)
 
 ;; The unix millisecond timestamp of the expiry date of the current cycle
-;; TODO: Rename to cycle-expiry
-(define-data-var current-cycle-expiry uint u1666368000000) ;; set to Fri Oct 21 2022 16:00:00 GMT+0000 
+(define-data-var current-cycle-expiry uint u1666972800000) ;; set to Fri Oct 28 2022 16:00:00 GMT+0000
 (define-constant week-in-milliseconds u604800000)
 (define-constant min-in-milliseconds u60000)
 
@@ -56,16 +55,6 @@
 (define-data-var auction-applied-decrements uint u0)
 (define-data-var options-price-in-usd (optional uint) none)
 (define-data-var options-for-sale uint u0)
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; TODO: Transition these TODOs to issues on Github
-
-;; TODO: Write init-first-cycle method
-;; TODO: Add fail-safe public function that allows contract-owner to manually initalize AND end the next cycle. 
-;; TODO: Add fail safe public function that allows contract-owner to manually end an auction --> needs to introduce a mint-open flag 
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; private functions
 
@@ -109,7 +98,7 @@
 				(merge
 					settlement-options-ledger-entry
 					{ 
-						option-pnl: (some (usd-to-stx (- stxusd-rate strike) stxusd-rate)) ;; #1: some value
+						option-pnl: (some (usd-to-stx (- stxusd-rate strike) stxusd-rate))
 					}
 				)
 			)
@@ -142,7 +131,7 @@
 		)
 		(if (> option-pnl u0) 
 			;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
-			(try! (as-contract (contract-call? .vault create-settlement-pool (* option-pnl options-minted-amount)))) ;; #2: total-settlement-pool > 0 
+			(try! (as-contract (contract-call? .vault create-settlement-pool (* option-pnl options-minted-amount)))) 
 			true
 		)
 		(ok true)
@@ -165,7 +154,7 @@
 	(let
 		(
 			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
-			(strike (calculate-strike stxusd-rate)) ;; simplified calculation for mvp scope
+			(strike (calculate-strike stxusd-rate))
 			(first-token-id (+ (unwrap-panic (get-last-token-id)) u1))
 		)
 		;; Create an options-ledger entry for the next cycle
@@ -333,7 +322,6 @@
 		;; Update the token ID nonce
 		(var-set token-id-nonce token-id)
 		;; Deposit the premium payment into the vault contract
-		;; TODO: Can get-update-latest-price-in-stx be replaced with usd-to-stx? What benefits does get-update-latest-price-in-stx have?
 		(try! (contract-call? .vault deposit-premium (try! (get-update-latest-price-in-stx timestamp stxusd-rate)) tx-sender))
 		;; Mint the options NFT
 		(try! (nft-mint? options-nft token-id tx-sender))
@@ -358,7 +346,7 @@
     (
       (recipient tx-sender)
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
-			(token-expiry (get timestamp (unwrap-panic (find-options-ledger-entry token-id)))) ;; TODO add ERR to find-options-ledger-entry function and reorganize error handling in claim
+			(token-expiry (get timestamp (unwrap-panic (find-options-ledger-entry token-id)))) 
 			(settlement-options-ledger-entry (unwrap! (get-options-ledger-entry token-expiry) ERR_OPTION_NOT_EXPIRED))
 			(option-pnl (unwrap-panic (get option-pnl settlement-options-ledger-entry)))
     )
@@ -369,7 +357,7 @@
 				;; Transfer options NFT to settlement contract
 				(try! (transfer token-id tx-sender (as-contract tx-sender)))
 				;; Transfer STX out of th settlement pool in the vault contract to recipient
-				(try! (as-contract (contract-call? .vault claim-settlement option-pnl recipient))) ;; TODO: rename to pay-claim or settle-claim
+				(try! (as-contract (contract-call? .vault claim-settlement option-pnl recipient))) 
 			)
 			true
 		)
@@ -400,6 +388,7 @@
 )
 
 ;; CONTRACT OWNERSHIP HELPER FUNCTIONS
+
 ;; #[allow(unchecked_data)]
 (define-public (set-contract-owner (new-owner principal))
 	(begin
@@ -480,7 +469,6 @@
 ;; (!) For testing purposes only, not to be deployed to production (!)
 ;; (!) Delete setter functions for deployment to improve contract security and cost efficiency (!)
 
-;; auction-start-time
 ;; #[allow(unchecked_data)]
 (define-public (set-auction-start-time (timestamp uint)) 
 	(begin
@@ -497,7 +485,6 @@
 	(var-get auction-decrement-value)
 )
 
-;; current-cycle-expiry
 ;; #[allow(unchecked_data)]
 (define-public (set-current-cycle-expiry (timestamp uint)) 
 	(begin
@@ -510,7 +497,6 @@
 	(var-get current-cycle-expiry)
 )
 
-;; options-price-in-usd
 ;; #[allow(unchecked_data)]
 (define-public (set-options-price-in-usd (price uint)) 
 	(begin
@@ -523,7 +509,6 @@
 	(var-get options-price-in-usd)
 )
 
-;; options-ledger
 ;; #[allow(unchecked_data)]
 (define-public (set-options-ledger-entry (strike uint)) 
 	(begin
@@ -553,7 +538,6 @@
   (ok (get option-pnl (unwrap! (map-get? options-ledger {cycle-expiry: cycle-expiry}) ERR_NO_ENTRY_FOR_EXPIRY)))
 )
 
-;; options-for-sale
 ;; #[allow(unchecked_data)]
 (define-public (set-options-for-sale (amount uint)) 
 	(begin
@@ -566,18 +550,15 @@
 	(var-get options-for-sale)
 )
 
-;; options-ledger-list
 (define-read-only (get-options-ledger-list) 
 	(var-get options-ledger-list)
 )
 
-;; TODO: Is this function still needed?
 (define-public (recover-signer  (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65))) 
 	(contract-call? .redstone-verify recover-signer timestamp entries signature)
 )
 
-;; Helper function for process-deposits
-(define-public (process-deposits-from-options) ;; TODO: Rename process-deposits-from-options-nft-contract
+(define-public (process-deposits-from-options) 
 
 	(as-contract (contract-call? .vault process-deposits))
 )
@@ -602,11 +583,10 @@
 	(var-get auction-applied-decrements)
 )
 
-;; auction-decrement-value
 ;; #[allow(unchecked_data)]
 (define-public (set-auction-decrement-value) 
 	(begin
 		(asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_CONTRACT_OWNER)
 		(ok (var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)))
-	 ) ;; each decrement represents 2% of the start price
+	 )
 )
