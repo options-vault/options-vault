@@ -7,7 +7,7 @@ import { PriceDataForContract, simulateTwoDepositsAndProcess, simulateTwoDeposit
 	submitPriceDataAndTest, simulateFirstCycleTillExpiry, convertRedstoneToContractData, setCurrentCycleExpiry 
 	} from "./init.ts";
 
-const contractOwner = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM";
+// Define contract constants
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
 const optionsNFTContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.options-nft";
 const optionsNFTAssetIdentifier = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.options-nft::options-nft";
@@ -18,7 +18,6 @@ const untrustedOraclePubkey = "0x03cd2cfdbd2ad9332828a7a13ef62cb999e063421c708e8
 // Redstone data points for testing (ten, each 1 min apart)
 const firstRedstoneTimestamp = redstoneDataOneMinApart[0].timestamp; // timestamp 1/10
 const midRedstoneTimestamp = redstoneDataOneMinApart[4].timestamp; // timestamp 5/10
-const lastRedstoneTimestamp = redstoneDataOneMinApart[9].timestamp; // timestamp 10/10
 const minuteInMilliseconds = 60000;
 const weekInMilliseconds = 604800000;
 
@@ -90,17 +89,10 @@ Clarinet.test({
 		deployer.address
 	)
 	assertEquals(optionsForSale.result, types.uint(testOptionsForSale))
-
-	// console.log('strike', strikeOptionsLedgerEntry.result.expectOk())
-	// console.log('price', optionsPrice.result.expectSome())
-	// console.log('auction-start-time', auctionStartTime.result)
-	// console.log('options-for-sale', optionsForSale.result)
-	// console.log('expiry', currentCycleExpiry.result)
 	},
 });
 
 // ### TEST SUBMIT PRICE DATA
-// TODO: Test for ERR_UNTRUSTED_ORACLE (u111) and ERR_STALE_RATE (u112)
 
 // Testing submit-price-data (before expiry)
 Clarinet.test({
@@ -150,10 +142,6 @@ Clarinet.test({
 	name: "Ensure that anyone can submit price data signed by trusted oracles AFTER the current-cycle-expiry data",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
-
-		const inTheMoneyStrikePrice = shiftPriceValue(redstoneDataOneMinApart[0].value * testInTheMoneyStrikePriceMultiplier)
-		const lastestStxusdRate = shiftPriceValue(redstoneDataOneMinApart[5].value)
-		const expectedOptionsPnlUSD = lastestStxusdRate - inTheMoneyStrikePrice
 
 		let block = simulateTwoDepositsAndProcess(chain, accounts)
 		const totalBalances = chain.callReadOnlyFn(
@@ -450,7 +438,7 @@ Clarinet.test({
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
 		block.receipts[0].result.expectOk().expectBool(true);
 
-		// We read the total-settlement-pool from the vault contract
+		// Read the total-settlement-pool from the vault contract
 		const totalSettlementPool = chain.callReadOnlyFn(
 			"vault",
 			"get-total-settlement-pool",
@@ -504,14 +492,14 @@ Clarinet.test({
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
 		block.receipts[0].result.expectOk().expectBool(true);
 
-		// We read the total-settlement-pool from the vault contract
+		// Read the total-settlement-pool from the vault contract
 		const totalSettlementPool = chain.callReadOnlyFn(
 			"vault",
 			"get-total-settlement-pool",
 			[],
 			deployer.address
 		)
-
+		// Check if a settlement-pool with the appropriate size (options-pnl for both minted NFTs) was created
 		assertEquals(
 			totalSettlementPool.result, 
 			types.uint(Math.floor(expectedOptionsPnlUSD / lastestStxusdRate * 1000000) * 2)
@@ -526,10 +514,6 @@ Clarinet.test({
 	name: "Ensure that update-vault-ledger (out-of-the-money) correclty increases total-balances",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
-
-		const inTheMoneyStrikePrice = shiftPriceValue(redstoneDataOneMinApart[0].value * testInTheMoneyStrikePriceMultiplier)
-		const lastestStxusdRate = shiftPriceValue(redstoneDataOneMinApart[5].value)
-		const expectedOptionsPnlUSD = lastestStxusdRate - inTheMoneyStrikePrice
 
 		let block = simulateTwoDepositsAndProcess(chain, accounts)
 		const totalBalances = chain.callReadOnlyFn(
@@ -560,12 +544,6 @@ Clarinet.test({
 		)
 		assertEquals(block.receipts.length, 2);
 
-		// const premiumOne = Number(block.receipts[0].events[0].stx_transfer_event.amount)
-		// const premiumTwo = Number(block.receipts[1].events[0].stx_transfer_event.amount)
-
-		// console.log("premiumOne", premiumOne)
-		// console.log("premiumTwo", premiumTwo)
-
 		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
 		block.receipts[0].result.expectOk().expectBool(true);
@@ -578,11 +556,8 @@ Clarinet.test({
 		)
 		const totalBalanceNewNum = Number(totalBalancesNew.result.slice(1))
 		const totalBalanceNum = Number(totalBalances.result.slice(1))
-
-		// console.log("totalBalanceNewNum", totalBalanceNewNum)
-		// console.log("totalBalanceNum", totalBalanceNum)
+		// Check if the total-balances variable has increased 
 		assertEquals(totalBalanceNewNum > totalBalanceNum, true)
-		// assertEquals(totalBalanceNewNum, totalBalanceNum + premiumOne + premiumTwo)
 	}
 })
 
@@ -591,10 +566,6 @@ Clarinet.test({
 	name: "Ensure that update-vault-ledger (in-the-money) correctly decreases total-balances",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
-
-		const inTheMoneyStrikePrice = shiftPriceValue(redstoneDataOneMinApart[0].value * testInTheMoneyStrikePriceMultiplier)
-		const lastestStxusdRate = shiftPriceValue(redstoneDataOneMinApart[5].value)
-		const expectedOptionsPnlUSD = lastestStxusdRate - inTheMoneyStrikePrice
 
 		let block = simulateTwoDepositsAndProcess(chain, accounts)
 		const totalBalances = chain.callReadOnlyFn(
@@ -625,12 +596,6 @@ Clarinet.test({
 		)
 		assertEquals(block.receipts.length, 2);
 
-		// const premiumOne = Number(block.receipts[0].events[0].stx_transfer_event.amount)
-		// const premiumTwo = Number(block.receipts[1].events[0].stx_transfer_event.amount)
-
-		// console.log("premiumOne", premiumOne)
-		// console.log("premiumTwo", premiumTwo)
-
 		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
 		block.receipts[0].result.expectOk().expectBool(true);
@@ -643,16 +608,10 @@ Clarinet.test({
 		)
 		const totalBalanceNewNum = Number(totalBalancesNew.result.slice(1))
 		const totalBalanceNum = Number(totalBalances.result.slice(1))
-
-		// console.log("totalBalancesNew", Number(totalBalancesNew.result.slice(1)))
-		// console.log("totalBalances", Number(totalBalances.result.slice(1)))
+		// Check if the total-balances variable has decreased 
 		assertEquals(totalBalanceNewNum < totalBalanceNum, true)
-		// assertEquals(Number(totalBalancesNew.result.slice(1)), Number(totalBalances.result.slice(1)) + mintAmountOne + mintAmountTwo)
 	}
 })
-
-// TODO Add test for case 2: ITM where total premium > settlement-pool, totalBalanceNew > totalBalance 
-// --> needs a strike price less than 2% below stxusd-rate.
 
 // ### TEST DISTRIBUTE-PNL
 
@@ -816,18 +775,6 @@ Clarinet.test({
 	}
 })
 
-// ### TEST PROCESS-DEPOSITS
-
-// Helper function: deposit wihtout processing
-// TODO: Test process-deposits OTM --> total-pending-deposits to zero
-// TODO: Test process-deposits OTM --> investor-balance for investorA goes up AND investor-pending-deposits goes to zero
-
-// ### TEST PROCESS-WITHDRAWALS
- 
-// Helper queue-withdrawal
-// TODO: Test process-withdrawals OTM --> total-balances goes up (with withdrwal being more than the premium payment)
-// TODO: Test process-withdrawals OTM --> STX transfer
-
 // ### TEST UPDATE-OPTIONS-LEDGER
 
 // Test update-options-ledger OTM --> entry for next-cycle expiry exists, strike set correctly, first-token-id 3, option-pnl none
@@ -872,16 +819,16 @@ Clarinet.test({
 		
 		// Check if value is a tuple
 		optionsLedgerEntry.result.expectOk().expectTuple()
-		// check that strike is set correctly
+		// Check that strike is set correctly
 		assertEquals(
 			optionsLedgerEntry.result.expectOk().expectTuple().strike, 
 			types.uint(shiftPriceValue(redstoneDataOneMinApart[5].value) * testOutOfTheMoneyStrikePriceMultiplier)
 		)
-		// check that first-token-id is 3
+		// Check that first-token-id is 3
 		assertEquals(optionsLedgerEntry.result.expectOk().expectTuple()["first-token-id"], types.uint(3))
-		// check that first-token-id is 3
+		// Check that first-token-id is 3
 		assertEquals(optionsLedgerEntry.result.expectOk().expectTuple()["last-token-id"], types.uint(3))
-		// check that option-pnl is none
+		// Check that option-pnl is none
 		optionsLedgerEntry.result.expectOk().expectTuple()["option-pnl"].expectNone()
 	}
 })
@@ -918,7 +865,7 @@ Clarinet.test({
 
 		const testNextCycleExpiry = testCycleExpiry + weekInMilliseconds
 
-		// get options-ledger entry
+		// Get options-ledger entry
 		const optionsLedgerEntry = chain.callReadOnlyFn(
 			"options-nft",
 			"get-options-ledger-entry",
@@ -928,16 +875,16 @@ Clarinet.test({
 		
 		// Check if value is a tuple
 		optionsLedgerEntry.result.expectOk().expectTuple()
-		// check that strike is set correctly
+		// Check that strike is set correctly
 		assertEquals(
 			optionsLedgerEntry.result.expectOk().expectTuple().strike, 
 			types.uint(shiftPriceValue(redstoneDataOneMinApart[5].value) * testOutOfTheMoneyStrikePriceMultiplier)
 		)
-		// check that first-token-id is 3
+		// Check that first-token-id is 3
 		assertEquals(optionsLedgerEntry.result.expectOk().expectTuple()["first-token-id"], types.uint(3))
-		// check that first-token-id is 3
+		// Check that first-token-id is 3
 		assertEquals(optionsLedgerEntry.result.expectOk().expectTuple()["last-token-id"], types.uint(3))
-		// check that option-pnl is none
+		// Check that option-pnl is none
 		optionsLedgerEntry.result.expectOk().expectTuple()["option-pnl"].expectNone()
 	}
 })
@@ -1062,7 +1009,6 @@ Clarinet.test({
 		)
 		const newOptionsPriceInUSDNum = Number(newOptionsPriceInUSD.result.expectSome().slice(1))
 		assertEquals(newOptionsPriceInUSDNum, shiftPriceValue(redstoneDataOneMinApart[5].value) * 0.005)
-
 	}
 })
 
@@ -1112,10 +1058,8 @@ Clarinet.test({
 		assertEquals(stxPriceB.result, types.uint(20132))
 
 		assertEquals(block.receipts.length, 2);
-		// TODO Refactor to use expectNonFungibleTokenMintEvent()
 		block.receipts[0].result.expectOk().expectUint(1)
 		block.receipts[0].events.expectSTXTransferEvent(20000, accountA.address, vaultContract)
-		// block.receipts[0].events.expectNonFungibleTokenMintEvent(types.uint(1), accountA.address, contractOwner, '.options-nft')
 		assertEquals(block.receipts[0].events[1].type, "nft_mint_event")
 
 		block.receipts[1].result.expectOk().expectUint(2)
@@ -1138,7 +1082,7 @@ Clarinet.test({
 			redstoneDataOneMinApart
 		);
 
-		// Corrupt the signed price data by subtracting 0.1 USD from the price 
+		// Corrupt the signed price data by subtracting 0.1 USD from the value property 
 		const corruptedPriceData = redstoneDataOneMinApart[0].value - 0.1
 
 		const pricePackage: PricePackage = {
@@ -1317,13 +1261,10 @@ Clarinet.test({
         accountA.address
       )
 		])
-		// After the 3 available NFTs have been minted, expect the call after that to produce (err u119)
+		// Expect the 4th contract call to the mint function to return (err u119)
 		block.receipts[optionsForSaleNum].result.expectErr().expectUint(119)
 	}
 });
-
-// Test mint for ERR_UPDATE_PRICE_FAILED (u124) ?
-
 
 // ### TEST UPDATE-OPTIONS-PRICE-IN-USD
 
@@ -1494,7 +1435,6 @@ Clarinet.test({
 			deployer.address
 		)
 		assertEquals(auctionAppliedDecrementsTwo.result, types.uint(1))
-
 	}
 });
 
@@ -1720,7 +1660,6 @@ Clarinet.test({
 			deployer.address
 		)
 		assertEquals(auctionAppliedDecrementsTwo.result, types.uint(2))
-
 	}
 });
 
@@ -1826,10 +1765,8 @@ Clarinet.test({
 			deployer.address
 		)
 		assertEquals(auctionAppliedDecrementsTwo.result, types.uint(5))
-
 	}
 });
-
 
 // ### TEST CLAIM
 
@@ -1891,7 +1828,6 @@ Clarinet.test({
 		])
 		block.receipts[0].result.expectOk().expectBool(true)
 		assertEquals(block.receipts[0].events, [])
-		
 	}
 })
 
@@ -2034,7 +1970,6 @@ Clarinet.test({
 	}
 })
 
-
 // ### TEST SET-TRUSTED-ORACLE
 
 // Testing setting trusted oracle
@@ -2100,7 +2035,6 @@ Clarinet.test({
 			[signer],
 			wallet_1
 		)
-
     assertEquals(isTrusted.result, "true")
     },
 });
