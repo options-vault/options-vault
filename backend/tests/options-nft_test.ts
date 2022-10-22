@@ -1,11 +1,10 @@
 
-import { Clarinet, Tx, Chain, Account, types, assertEquals, stringToUint8Array, shiftPriceValue, liteSignatureToStacksSignature, pricePackageToCV } from "./deps.ts";
-import { PricePackage, Block } from "./deps.ts";
+import { Clarinet, Tx, Chain, Account, types, assertEquals, shiftPriceValue, liteSignatureToStacksSignature, pricePackageToCV } from "./deps.ts";
+import { PricePackage } from "./deps.ts";
 import axiod from "https://deno.land/x/axiod@0.26.2/mod.ts";
 import { redstoneDataOneMinApart } from "./redstone-data.ts";
-import { PriceDataForContract, simulateTwoDepositsAndProcess, simulateTwoDeposits, initFirstAuction, initMint, setTrustedOracle, submitPriceData, 
-	submitPriceDataAndTest, simulateFirstCycleTillExpiry, convertRedstoneToContractData, setCurrentCycleExpiry 
-	} from "./init.ts";
+import { simulateTwoDepositsAndProcess, initFirstAuction, initMint, setTrustedOracle, submitPriceData, 
+	submitPriceDataAndTest, convertRedstoneToContractData, setCurrentCycleExpiry } from "./init.ts";
 
 // Define contract constants
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";

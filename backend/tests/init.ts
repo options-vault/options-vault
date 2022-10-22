@@ -6,22 +6,15 @@ export { redstoneDataOneMinApart } from "./redstone-data.ts";
 // Redstone data points for testing (ten, each 1 min apart)
 const firstRedstoneTimestamp = redstoneDataOneMinApart[0].timestamp; // timestamp 1/10
 const midRedstoneTimestamp = redstoneDataOneMinApart[4].timestamp; // timestamp 5/10
-const lastRedstoneTimestamp = redstoneDataOneMinApart[9].timestamp; // timestamp 10/10
 
 // Testing constants
 const testAuctionStartTime = firstRedstoneTimestamp - 10; 
 const testCycleExpiry = midRedstoneTimestamp + 10;
-const testOptionsForSale = 3;
-const testOptionsUsdPricingMultiplier = 0.02
 const testOutOfTheMoneyStrikePriceMultiplier = 1.15 // 15% above spot
 const testInTheMoneyStrikePriceMultiplier = 0.8 // 20% below spot
 
 const trustedOraclePubkey = "0x035ca791fed34bf9e9d54c0ce4b9626e1382cf13daa46aa58b657389c24a751cc6";
 const untrustedOraclePubkey = "0x03cd2cfdbd2ad9332828a7a13ef62cb999e063421c708e863a7ffed71fb61c88c9";
-
-export const testConfig = {
-  firstRedstoneTimestamp, midRedstoneTimestamp, lastRedstoneTimestamp, testAuctionStartTime, testCycleExpiry, testOptionsForSale, testOptionsUsdPricingMultiplier, testOutOfTheMoneyStrikePriceMultiplier, testInTheMoneyStrikePriceMultiplier
-}
 
 export type RedstoneData = {
 	id: string,
@@ -191,13 +184,12 @@ export function submitPriceDataAndTest(
     return block;
 }
 
-// TODO: set auction-decrement-value
-// TODO: take out set-current-cycle-expiry call and refactor options-nft tests
+// Initializes all variables that allow a first auction to be simulated
 export function initFirstAuction(
   chain: Chain, 
   deployerAddress: string,
   auctionStart: number, 
-  cycleExpiry: number, // TODO: Pull cycleExpiry into another init function - setCycleExpiry
+  cycleExpiry: number, 
   inTheMoney: string, 
   redstoneData: RedstoneData[]
   ): Block {
@@ -288,7 +280,6 @@ export function initMint(
     return block;
 }
 
-// TODO: Take out submitPriceData
 // Creates an auction that deposits, inits auction, buys 2 nfts, closes auction and initializes claim period
 export function simulateFirstCycleTillExpiry(
   chain: Chain, 
