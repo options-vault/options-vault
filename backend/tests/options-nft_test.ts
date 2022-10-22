@@ -2045,9 +2045,21 @@ Clarinet.test({
 		const block = setTrustedOracle(chain, deployer.address);
 		const [receipt] = block.receipts;
 		receipt.result.expectOk().expectBool(true);
-		const trusted = chain.callReadOnlyFn("options-nft", "is-trusted-oracle", [trustedOraclePubkey], deployer.address);
-		const untrusted = chain.callReadOnlyFn("options-nft", "is-trusted-oracle", [untrustedOraclePubkey], deployer.address);
+		
+		const trusted = chain.callReadOnlyFn(
+			"options-nft", 
+			"is-trusted-oracle", 
+			[trustedOraclePubkey], 
+			deployer.address
+		);
 		trusted.result.expectBool(true);
+		
+		const untrusted = chain.callReadOnlyFn(
+			"options-nft", 
+			"is-trusted-oracle", 
+			[untrustedOraclePubkey], 
+			deployer.address
+		);
 		untrusted.result.expectBool(false);
 	},
 });
@@ -2091,4 +2103,99 @@ Clarinet.test({
 
     assertEquals(isTrusted.result, "true")
     },
+});
+
+// ### TEST SET-CONTRACT-OWNER
+// Test set-contract-owner 
+Clarinet.test({
+	name: "Ensure that contract-owner can be set by the current contract owner",
+	async fn(chain: Chain, accounts: Map<string, Account>) {
+
+	const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+	const contractOwnerOne = chain.callReadOnlyFn(
+		"options-nft",
+		"get-contract-owner",
+		[],
+		deployer.address
+	)
+	assertEquals(contractOwnerOne.result.expectOk(), deployer.address)
+
+	let block = chain.mineBlock([
+		Tx.contractCall(
+			"options-nft",
+			"set-contract-owner",
+			[types.principal(accountA.address)],
+			deployer.address
+		)
+	])
+	block.receipts[0].result.expectOk().expectBool(true)
+
+	const contractOwnerTwo = chain.callReadOnlyFn(
+		"options-nft",
+		"get-contract-owner",
+		[],
+		deployer.address
+	)
+	assertEquals(contractOwnerTwo.result.expectOk(), accountA.address)	
+	},
+});
+
+// ### TEST NFT HELPER FUNCTIONS
+
+// Test get-token-uri
+Clarinet.test({
+	name: "Ensure that token-uri can be read",
+	async fn(chain: Chain, accounts: Map<string, Account>) {
+
+	const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+	let block = chain.mineBlock([
+		Tx.contractCall(
+			"options-nft",
+			"get-token-uri",
+			[types.uint(1)],
+			deployer.address
+		)
+	])
+	block.receipts[0].result.expectOk().expectNone()
+	}
+});
+
+// Test get-owner
+Clarinet.test({
+	name: "Ensure that get-owner returns the principal that owns the options NFT",
+	async fn(chain: Chain, accounts: Map<string, Account>) {
+
+	const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+	let block = initFirstAuction(
+		chain, 
+		deployer.address,
+		testAuctionStartTime, 
+		testCycleExpiry,  
+		'outOfTheMoney', 
+		redstoneDataOneMinApart
+	);
+	assertEquals(block.receipts.length, 5);
+
+	// Mint two option NFTs
+	block = initMint(
+		chain, 
+		accountA.address, 
+		accountB.address, 
+		redstoneDataOneMinApart
+	)
+	assertEquals(block.receipts.length, 2);
+
+	block = chain.mineBlock([
+		Tx.contractCall(
+			"options-nft",
+			"get-owner",
+			[types.uint(1)],
+			deployer.address
+		)
+	])
+	assertEquals(block.receipts[0].result.expectOk().expectSome(), accountA.address)
+	}
 });
