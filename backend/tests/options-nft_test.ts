@@ -10,6 +10,7 @@ import { PriceDataForContract, simulateTwoDepositsAndProcess, simulateTwoDeposit
 const contractOwner = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM";
 const vaultContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.vault";
 const optionsNFTContract = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.options-nft";
+const optionsNFTAssetIdentifier = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.options-nft::options-nft";
 
 const trustedOraclePubkey = "0x035ca791fed34bf9e9d54c0ce4b9626e1382cf13daa46aa58b657389c24a751cc6";
 const untrustedOraclePubkey = "0x03cd2cfdbd2ad9332828a7a13ef62cb999e063421c708e863a7ffed71fb61c88c9";
@@ -376,7 +377,7 @@ Clarinet.test({
 
 // Test that add-to-options-ledger-list (called by determin-value) correctly adds the expired cycle's information to the list
 Clarinet.test({
-	name: "Ensure that add-to-options-ledger-list (called by determine-value) correctly adds expired cycle's information to the options-ledgerlist",
+	name: "Ensure that add-to-options-ledger-list (called by determine-value) correctly adds expired cycle's information to the options-ledger-list",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
 
@@ -1159,7 +1160,7 @@ Clarinet.test({
         accountA.address
       )
 		])
-		block.receipts[0].result.expectErr(111);
+		block.receipts[0].result.expectErr().expectUint(111);
 	}
 });
 
@@ -1168,6 +1169,7 @@ Clarinet.test({
 	name: "Ensure that mint (out-of-the-money) produces ERR_AUCTION_CLOSED if called outside the auction window",
 	fn(chain: Chain, accounts: Map<string, Account>) {
 		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+		
 		let block = initFirstAuction(
 			chain, 
 			deployer.address,
@@ -1182,14 +1184,14 @@ Clarinet.test({
 			prices: [{ symbol: "STX", value: redstoneDataOneMinApart[0].value }]
 		}
 		const packageCV = pricePackageToCV(pricePackage)
-		const signature = types.buff(liteSignatureToStacksSignature(redstoneDataOneMinApart[1].liteEvmSignature))
+		const signature = types.buff(liteSignatureToStacksSignature(redstoneDataOneMinApart[0].liteEvmSignature))
 
 		// Change the auction-start-time to 240 min in the PAST --> now it is closed
 		block = chain.mineBlock([
 			Tx.contractCall(
 				"options-nft",
 				"set-auction-start-time",
-				[types.uint(redstoneDataOneMinApart[1].timestamp - 240 * minuteInMilliseconds)],
+				[types.uint(redstoneDataOneMinApart[0].timestamp - 240 * minuteInMilliseconds)],
 				deployer.address
 			)
 		])
@@ -1206,14 +1208,14 @@ Clarinet.test({
         accountA.address
       )
 		])
-		block.receipts[0].result.expectErr(118);
+		block.receipts[0].result.expectErr().expectUint(118);
 
 		// Change the auction-start-time to 240 min in the FUTURE --> now it is closed
 		block = chain.mineBlock([
 			Tx.contractCall(
 				"options-nft",
 				"set-auction-start-time",
-				[types.uint(redstoneDataOneMinApart[1].timestamp + 240 * minuteInMilliseconds)],
+				[types.uint(redstoneDataOneMinApart[0].timestamp + 240 * minuteInMilliseconds)],
 				deployer.address
 			)
 		])
@@ -1224,7 +1226,7 @@ Clarinet.test({
 			[],
 			deployer.address
 		)
-		assertEquals(auctionStartTimeFuture.result, types.uint(redstoneDataOneMinApart[1].timestamp + 240 * minuteInMilliseconds))
+		assertEquals(auctionStartTimeFuture.result, types.uint(redstoneDataOneMinApart[0].timestamp + 240 * minuteInMilliseconds))
 
 		block = chain.mineBlock([
       Tx.contractCall(
@@ -1238,7 +1240,7 @@ Clarinet.test({
         accountA.address
       )
 		])
-		block.receipts[0].result.expectErr(118);
+		block.receipts[0].result.expectErr().expectUint(118);
 	}
 });
 
@@ -1316,16 +1318,721 @@ Clarinet.test({
       )
 		])
 		// After the 3 available NFTs have been minted, expect the call after that to produce (err u119)
-		block.receipts[optionsForSaleNum].result.expectErr(119)
+		block.receipts[optionsForSaleNum].result.expectErr().expectUint(119)
 	}
 });
 
 // Test mint for ERR_UPDATE_PRICE_FAILED (u124) ?
 
 
+// ### TEST UPDATE-OPTIONS-PRICE-IN-USD
+
+// Test upate-options-price-in-usd for timestamp 15min after auction-start-time --> options-price-in-usd should be unchanged
+Clarinet.test({
+	name: "Ensure that update-options-price-in-usd (out-of-the-money) does not change options-price-in-usd if mint called less than 30 min after auction-start-time",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+		
+		let block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+
+		// Read options-price-in-usd
+		const optionsPriceInUSDOne = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-price-in-usd",
+			[],
+			deployer.address
+		)
+
+		const pricePackage: PricePackage = {
+			timestamp: redstoneDataOneMinApart[0].timestamp,
+			prices: [{ symbol: "STX", value: redstoneDataOneMinApart[0].value }]
+		}
+		const packageCV = pricePackageToCV(pricePackage)
+		const signature = types.buff(liteSignatureToStacksSignature(redstoneDataOneMinApart[0].liteEvmSignature))
+
+		// Change the auction-start-time to 15 min in the PAST 
+		block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft",
+				"set-auction-start-time",
+				[types.uint(redstoneDataOneMinApart[0].timestamp - 15 * minuteInMilliseconds)],
+				deployer.address
+			)
+		])
+
+		// Mint NFT
+		block = chain.mineBlock([
+      Tx.contractCall(
+        "options-nft",
+        "mint",
+        [
+          packageCV.timestamp,
+          packageCV.prices,
+          signature	
+        ],
+        accountA.address
+      )
+		])
+
+		// Read options-price-in-usd
+		const optionsPriceInUSDTwo = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-price-in-usd",
+			[],
+			deployer.address
+		)
+		assertEquals(optionsPriceInUSDOne.result, optionsPriceInUSDTwo.result)
+	}
+});
+
+// Test update-options-price-in-usd for timestamp 45 min after auction-start-time --> options-price-in-usd should be 2% lower
+Clarinet.test({
+	name: "Ensure that update-options-price-in-usd (out-of-the-money) reduces options-price-in-usd by 2% if mint called more than 30 min after auction-start-time",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+		
+		let block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+
+		// Read options-price-in-usd
+		const optionsPriceInUSDOne = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-price-in-usd",
+			[],
+			deployer.address
+		)
+		const optionsPriceInUSDOneNum = Number(optionsPriceInUSDOne.result.expectSome().slice(1))
+
+		// Set the auction-decrement-value to 2% of the options-price-in-usd
+		block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft",
+				"set-auction-decrement-value",
+				[],
+				deployer.address
+			)
+		])
+
+		// Read the auctionDecrementValue
+		const auctionDecrementValue = chain.callReadOnlyFn(
+			"options-nft",
+			"get-auction-decrement-value",
+			[],
+			deployer.address
+		)
+		const auctionDecrementValueNum = Number(auctionDecrementValue.result.slice(1))
+		assertEquals(auctionDecrementValue.result, types.uint(optionsPriceInUSDOneNum * 0.02))
+
+		// Read auction-applied-decrements
+		const auctionAppliedDecrementsOne = chain.callReadOnlyFn(
+			"options-nft",
+			"get-auction-applied-decrements",
+			[],
+			deployer.address
+		)
+		assertEquals(auctionAppliedDecrementsOne.result, types.uint(0))
+
+		const pricePackage: PricePackage = {
+			timestamp: redstoneDataOneMinApart[0].timestamp,
+			prices: [{ symbol: "STX", value: redstoneDataOneMinApart[0].value }]
+		}
+		const packageCV = pricePackageToCV(pricePackage)
+		const signature = types.buff(liteSignatureToStacksSignature(redstoneDataOneMinApart[0].liteEvmSignature))
+
+		// Change the auction-start-time to 45 min in the PAST 
+		block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft",
+				"set-auction-start-time",
+				[types.uint(redstoneDataOneMinApart[0].timestamp - 45 * minuteInMilliseconds)],
+				deployer.address
+			)
+		])
+
+		// Mint NFT
+		block = chain.mineBlock([
+      Tx.contractCall(
+        "options-nft",
+        "mint",
+        [
+          packageCV.timestamp,
+          packageCV.prices,
+          signature	
+        ],
+        accountA.address
+      )
+		])
+
+		// Read options-price-in-usd
+		const optionsPriceInUSDTwo = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-price-in-usd",
+			[],
+			deployer.address
+		)
+		const optionsPriceInUSDTwoNum = Number(optionsPriceInUSDTwo.result.expectSome().slice(1))
+		assertEquals(optionsPriceInUSDTwoNum, optionsPriceInUSDOneNum - 1 * auctionDecrementValueNum)
+
+		// Read auction-applied-decrements
+		const auctionAppliedDecrementsTwo = chain.callReadOnlyFn(
+			"options-nft",
+			"get-auction-applied-decrements",
+			[],
+			deployer.address
+		)
+		assertEquals(auctionAppliedDecrementsTwo.result, types.uint(1))
+
+	}
+});
+
+// Test update-options-price-in-usd for timestamp 45 min after auction-start-time for a SECOND time --> options-price-in-usd should be 2% lower
+Clarinet.test({
+	name: "Ensure that update-options-price-in-usd (out-of-the-money) reduces options-price-in-usd by 2% if mint called more than 30 min after auction-start-time, even if called TWICE",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+		
+		let block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+
+		// Read options-price-in-usd
+		const optionsPriceInUSDOne = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-price-in-usd",
+			[],
+			deployer.address
+		)
+		const optionsPriceInUSDOneNum = Number(optionsPriceInUSDOne.result.expectSome().slice(1))
+
+		// Set the auction-decrement-value to 2% of the options-price-in-usd
+		block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft",
+				"set-auction-decrement-value",
+				[],
+				deployer.address
+			)
+		])
+
+		// Read the auctionDecrementValue
+		const auctionDecrementValue = chain.callReadOnlyFn(
+			"options-nft",
+			"get-auction-decrement-value",
+			[],
+			deployer.address
+		)
+		const auctionDecrementValueNum = Number(auctionDecrementValue.result.slice(1))
+		assertEquals(auctionDecrementValue.result, types.uint(optionsPriceInUSDOneNum * 0.02))
+
+		// Read auction-applied-decrements
+		const auctionAppliedDecrementsOne = chain.callReadOnlyFn(
+			"options-nft",
+			"get-auction-applied-decrements",
+			[],
+			deployer.address
+		)
+		assertEquals(auctionAppliedDecrementsOne.result, types.uint(0))
+
+		const pricePackage: PricePackage = {
+			timestamp: redstoneDataOneMinApart[0].timestamp,
+			prices: [{ symbol: "STX", value: redstoneDataOneMinApart[0].value }]
+		}
+		const packageCV = pricePackageToCV(pricePackage)
+		const signature = types.buff(liteSignatureToStacksSignature(redstoneDataOneMinApart[0].liteEvmSignature))
+
+		// Change the auction-start-time to 45 min in the PAST 
+		block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft",
+				"set-auction-start-time",
+				[types.uint(redstoneDataOneMinApart[0].timestamp - 45 * minuteInMilliseconds)],
+				deployer.address
+			)
+		])
+
+		// First mint
+		block = chain.mineBlock([
+      Tx.contractCall(
+        "options-nft",
+        "mint",
+        [
+          packageCV.timestamp,
+          packageCV.prices,
+          signature	
+        ],
+        accountA.address
+      )
+		])
+
+		// Second mint
+		block = chain.mineBlock([
+      Tx.contractCall(
+        "options-nft",
+        "mint",
+        [
+          packageCV.timestamp,
+          packageCV.prices,
+          signature	
+        ],
+        accountA.address
+      )
+		])
+
+		// Read options-price-in-usd
+		const optionsPriceInUSDTwo = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-price-in-usd",
+			[],
+			deployer.address
+		)
+		const optionsPriceInUSDTwoNum = Number(optionsPriceInUSDTwo.result.expectSome().slice(1))
+		assertEquals(optionsPriceInUSDTwoNum, optionsPriceInUSDOneNum - 1 * auctionDecrementValueNum)
+
+		// Read auction-applied-decrements
+		const auctionAppliedDecrementsTwo = chain.callReadOnlyFn(
+			"options-nft",
+			"get-auction-applied-decrements",
+			[],
+			deployer.address
+		)
+		assertEquals(auctionAppliedDecrementsTwo.result, types.uint(1))
+
+	}
+});
+
+// Test update-options-price-in-usd for timestamp 75 min after auction-start-time --> options-price-in-usd should be 4% lower
+Clarinet.test({
+	name: "Ensure that update-options-price-in-usd (out-of-the-money) reduces options-price-in-usd by 4% if mint called more than 60 min after auction-start-time",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+		
+		let block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+
+		// Read options-price-in-usd
+		const optionsPriceInUSDOne = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-price-in-usd",
+			[],
+			deployer.address
+		)
+		const optionsPriceInUSDOneNum = Number(optionsPriceInUSDOne.result.expectSome().slice(1))
+
+		// Set the auction-decrement-value to 2% of the options-price-in-usd
+		block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft",
+				"set-auction-decrement-value",
+				[],
+				deployer.address
+			)
+		])
+
+		// Read the auctionDecrementValue
+		const auctionDecrementValue = chain.callReadOnlyFn(
+			"options-nft",
+			"get-auction-decrement-value",
+			[],
+			deployer.address
+		)
+		const auctionDecrementValueNum = Number(auctionDecrementValue.result.slice(1))
+		assertEquals(auctionDecrementValue.result, types.uint(optionsPriceInUSDOneNum * 0.02))
+
+		// Read auction-applied-decrements
+		const auctionAppliedDecrementsOne = chain.callReadOnlyFn(
+			"options-nft",
+			"get-auction-applied-decrements",
+			[],
+			deployer.address
+		)
+		assertEquals(auctionAppliedDecrementsOne.result, types.uint(0))
+
+		const pricePackage: PricePackage = {
+			timestamp: redstoneDataOneMinApart[0].timestamp,
+			prices: [{ symbol: "STX", value: redstoneDataOneMinApart[0].value }]
+		}
+		const packageCV = pricePackageToCV(pricePackage)
+		const signature = types.buff(liteSignatureToStacksSignature(redstoneDataOneMinApart[0].liteEvmSignature))
+
+		// Change the auction-start-time to 75 min in the PAST 
+		block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft",
+				"set-auction-start-time",
+				[types.uint(redstoneDataOneMinApart[0].timestamp - 75 * minuteInMilliseconds)],
+				deployer.address
+			)
+		])
+
+		// Mint NFT
+		block = chain.mineBlock([
+      Tx.contractCall(
+        "options-nft",
+        "mint",
+        [
+          packageCV.timestamp,
+          packageCV.prices,
+          signature	
+        ],
+        accountA.address
+      )
+		])
+
+		// Read options-price-in-usd
+		const optionsPriceInUSDTwo = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-price-in-usd",
+			[],
+			deployer.address
+		)
+		const optionsPriceInUSDTwoNum = Number(optionsPriceInUSDTwo.result.expectSome().slice(1))
+		assertEquals(optionsPriceInUSDTwoNum, optionsPriceInUSDOneNum - 2 * auctionDecrementValueNum)
+
+		// Read auction-applied-decrements
+		const auctionAppliedDecrementsTwo = chain.callReadOnlyFn(
+			"options-nft",
+			"get-auction-applied-decrements",
+			[],
+			deployer.address
+		)
+		assertEquals(auctionAppliedDecrementsTwo.result, types.uint(2))
+
+	}
+});
+
+// Test update-options-price-in-usd for timestamp 165 min after auction-start-time --> options-price-in-usd should be 10% lower
+Clarinet.test({
+	name: "Ensure that update-options-price-in-usd (out-of-the-money) reduces options-price-in-usd by 10% if mint called more than 150 min after auction-start-time",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+		
+		let block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+
+		// Read options-price-in-usd
+		const optionsPriceInUSDOne = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-price-in-usd",
+			[],
+			deployer.address
+		)
+		const optionsPriceInUSDOneNum = Number(optionsPriceInUSDOne.result.expectSome().slice(1))
+
+		// Set the auction-decrement-value to 2% of the options-price-in-usd
+		block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft",
+				"set-auction-decrement-value",
+				[],
+				deployer.address
+			)
+		])
+
+		// Read the auctionDecrementValue
+		const auctionDecrementValue = chain.callReadOnlyFn(
+			"options-nft",
+			"get-auction-decrement-value",
+			[],
+			deployer.address
+		)
+		const auctionDecrementValueNum = Number(auctionDecrementValue.result.slice(1))
+		assertEquals(auctionDecrementValue.result, types.uint(optionsPriceInUSDOneNum * 0.02))
+
+		// Read auction-applied-decrements
+		const auctionAppliedDecrementsOne = chain.callReadOnlyFn(
+			"options-nft",
+			"get-auction-applied-decrements",
+			[],
+			deployer.address
+		)
+		assertEquals(auctionAppliedDecrementsOne.result, types.uint(0))
+
+		const pricePackage: PricePackage = {
+			timestamp: redstoneDataOneMinApart[0].timestamp,
+			prices: [{ symbol: "STX", value: redstoneDataOneMinApart[0].value }]
+		}
+		const packageCV = pricePackageToCV(pricePackage)
+		const signature = types.buff(liteSignatureToStacksSignature(redstoneDataOneMinApart[0].liteEvmSignature))
+
+		// Change the auction-start-time to 75 min in the PAST 
+		block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft",
+				"set-auction-start-time",
+				[types.uint(redstoneDataOneMinApart[0].timestamp - 165 * minuteInMilliseconds)],
+				deployer.address
+			)
+		])
+
+		// Mint NFT
+		block = chain.mineBlock([
+      Tx.contractCall(
+        "options-nft",
+        "mint",
+        [
+          packageCV.timestamp,
+          packageCV.prices,
+          signature	
+        ],
+        accountA.address
+      )
+		])
+
+		// Read options-price-in-usd
+		const optionsPriceInUSDTwo = chain.callReadOnlyFn(
+			"options-nft",
+			"get-options-price-in-usd",
+			[],
+			deployer.address
+		)
+		const optionsPriceInUSDTwoNum = Number(optionsPriceInUSDTwo.result.expectSome().slice(1))
+		assertEquals(optionsPriceInUSDTwoNum, optionsPriceInUSDOneNum - 5 * auctionDecrementValueNum)
+
+		// Read auction-applied-decrements
+		const auctionAppliedDecrementsTwo = chain.callReadOnlyFn(
+			"options-nft",
+			"get-auction-applied-decrements",
+			[],
+			deployer.address
+		)
+		assertEquals(auctionAppliedDecrementsTwo.result, types.uint(5))
+
+	}
+});
 
 
+// ### TEST CLAIM
 
+// Test claim (out-of-the-money) --> (ok true), no STX transfer
+Clarinet.test({
+	name: "Ensure that claim (out-of-the-money) works but does not send a STX transfer",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		let block = simulateTwoDepositsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Initialize the first auction; the strike price is out-of-the-money (above spot)
+		block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		// console.log(block.receipts)
+		assertEquals(block.receipts.length, 2);
+
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		const { timestamp, price, signature } = convertRedstoneToContractData(redstoneDataOneMinApart[6])
+
+		// Call claim for accountA and token-id u1
+		block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft",
+				"claim",
+				[
+					types.uint(1), 
+					timestamp,
+					price,
+					signature
+				],
+				accountA.address
+			)
+		])
+		block.receipts[0].result.expectOk().expectBool(true)
+		assertEquals(block.receipts[0].events, [])
+		
+	}
+})
+
+// Test claim (in-the-money) --> (ok true), NFT transfer AND STX transfer
+Clarinet.test({
+	name: "Ensure that claim (in-the-money) sends the NFT to the contract and STX to the tx-sender",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		let block = simulateTwoDepositsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Initialize the first auction; the strike price is out-of-the-money (above spot)
+		block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'inTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		// console.log(block.receipts)
+		assertEquals(block.receipts.length, 2);
+
+		// Submit price data with a timestamp slightly after the current-cycle-expiry to trigger transition-to-next-cycle
+		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
+		block.receipts[0].result.expectOk().expectBool(true);
+
+		const { timestamp, price, signature } = convertRedstoneToContractData(redstoneDataOneMinApart[6])
+
+		// Call claim for accountA and token-id u1
+		block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft",
+				"claim",
+				[
+					types.uint(1), 
+					timestamp,
+					price,
+					signature
+				],
+				accountA.address
+			)
+		])
+		// Check if the contract call was successful
+		block.receipts[0].result.expectOk().expectBool(true)
+		// Check that the NFT was transferred from tx-sender to the options-nft contract
+		assertEquals(block.receipts[0].events[0].type, "nft_transfer_event") 
+		assertEquals(block.receipts[0].events[0]["nft_transfer_event"].asset_identifier, optionsNFTAssetIdentifier) 
+		assertEquals(block.receipts[0].events[0]["nft_transfer_event"].value, types.uint(1))
+		assertEquals(block.receipts[0].events[0]["nft_transfer_event"].sender, accountA.address) 
+		assertEquals(block.receipts[0].events[0]["nft_transfer_event"].recipient, optionsNFTContract)
+		
+		// Read the options-pnl
+		const optionPnlinSTX = chain.callReadOnlyFn(
+			"options-nft",
+			"get-option-pnl-for-expiry",
+			[types.uint(testCycleExpiry)],
+			deployer.address
+		)
+		const optionPnlinSTXNum = Number(optionPnlinSTX.result.expectOk().expectSome().slice(1))
+
+		// Check if the option-pnl in STX was send to the tx-sender
+		block.receipts[0].events.expectSTXTransferEvent(
+			optionPnlinSTXNum,
+			vaultContract,
+			accountA.address
+		)
+	}
+})
+
+// Test claim (out-of-the-money) for an options NFT that is not expired --> ERR_OPTION_NOT_EXPIRED (err u115)
+Clarinet.test({
+	name: "Ensure that claim (out-of-the-money) does not work if called with an options-nft that has not yet expired",
+	fn(chain: Chain, accounts: Map<string, Account>) {
+		const [deployer, accountA, accountB] = ["deployer", "wallet_1", "wallet_2"].map(who => accounts.get(who)!);
+
+		let block = simulateTwoDepositsAndProcess(chain, accounts)
+		const totalBalances = chain.callReadOnlyFn(
+			"vault",
+			"get-total-balances",
+			[],
+			deployer.address
+		)
+		assertEquals(totalBalances.result, types.uint(3000000))
+
+		// Initialize the first auction; the strike price is out-of-the-money (above spot)
+		block = initFirstAuction(
+			chain, 
+			deployer.address,
+			testAuctionStartTime, 
+			testCycleExpiry,  
+			'outOfTheMoney', 
+			redstoneDataOneMinApart
+		);
+		assertEquals(block.receipts.length, 5);
+
+		// Mint two option NFTs
+		block = initMint(
+			chain, 
+			accountA.address, 
+			accountB.address, 
+			redstoneDataOneMinApart
+		)
+		assertEquals(block.receipts.length, 2);
+
+		const { timestamp, price, signature } = convertRedstoneToContractData(redstoneDataOneMinApart[2])
+		
+		// Call claim for accountA and token-id u1
+		block = chain.mineBlock([
+			Tx.contractCall(
+				"options-nft",
+				"claim",
+				[
+					types.uint(1), 
+					timestamp,
+					price,
+					signature
+				],
+				accountA.address
+			)
+		])
+		// Since the options NFT is not yet expired we expect ERR_OPTION_NOT_EXPIRED (err u115)
+		block.receipts[0].result.expectErr().expectUint(115)
+	}
+})
 
 
 // ### TEST SET-TRUSTED-ORACLE
@@ -1347,42 +2054,41 @@ Clarinet.test({
 
 // ### TEST RECOVER-SIGNER
 
-// TODO: UNCOMMENT
 // Testing recover-signer - price package is signed by the same pubkey on every call
-// Clarinet.test({
-//     name: "Ensure that the price package is signed by the same pubkey on every call",
-//     async fn(chain: Chain, accounts: Map<string, Account>) {
+Clarinet.test({
+    name: "Ensure that the price package is signed by the same pubkey on every call",
+    async fn(chain: Chain, accounts: Map<string, Account>) {
 
-// 		const wallet_1 = accounts.get('wallet_1')!.address;
+		const wallet_1 = accounts.get('wallet_1')!.address;
 
-// 		let redstone_response = { timestamp: 0, liteEvmSignature: "", value: 0 }
-// 		await axiod.get("https://api.redstone.finance/prices?symbol=STX&provider=redstone").then((response) => {
-// 				redstone_response = response.data[0]
-// 		});
+		let redstone_response = { timestamp: 0, liteEvmSignature: "", value: 0 }
+		await axiod.get("https://api.redstone.finance/prices?symbol=STX&provider=redstone").then((response) => {
+				redstone_response = response.data[0]
+		});
 
-// 		const pricePackage: PricePackage = {
-// 			timestamp: redstone_response.timestamp,
-// 			prices: [{ symbol: "STX", value: redstone_response.value }]
-// 		}
-// 		const packageCV = pricePackageToCV(pricePackage);
+		const pricePackage: PricePackage = {
+			timestamp: redstone_response.timestamp,
+			prices: [{ symbol: "STX", value: redstone_response.value }]
+		}
+		const packageCV = pricePackageToCV(pricePackage);
 
-// 		let block = chain.mineBlock([
-// 			Tx.contractCall("options-nft", "recover-signer", [
-// 				packageCV.timestamp,
-// 				packageCV.prices,
-// 				types.buff(liteSignatureToStacksSignature(redstone_response.liteEvmSignature))
-// 			], wallet_1)
-// 		]);
+		let block = chain.mineBlock([
+			Tx.contractCall("options-nft", "recover-signer", [
+				packageCV.timestamp,
+				packageCV.prices,
+				types.buff(liteSignatureToStacksSignature(redstone_response.liteEvmSignature))
+			], wallet_1)
+		]);
 
-// 		const signer = block.receipts[0].result.expectOk()
+		const signer = block.receipts[0].result.expectOk()
 		
-// 		const isTrusted = chain.callReadOnlyFn(
-// 			"options-nft",
-// 			"is-trusted-oracle",
-// 			[signer],
-// 			wallet_1
-// 		)
+		const isTrusted = chain.callReadOnlyFn(
+			"options-nft",
+			"is-trusted-oracle",
+			[signer],
+			wallet_1
+		)
 
-//     assertEquals(isTrusted.result, "true")
-//     },
-// });
+    assertEquals(isTrusted.result, "true")
+    },
+});

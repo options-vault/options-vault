@@ -22,6 +22,7 @@
 (define-constant ERR_NO_OPTION_PNL_AVAILABLE (err u126))
 (define-constant ERR_INIT_AUCTION (err u127))
 (define-constant ERR_PNL_DISTRIBUTION (err u128))
+(define-constant ERR_NOT_IN_OPTIONS_LEDGER_LIST (err u129))
 
 (define-constant CONTRACT_ADDRESS (as-contract tx-sender))
 (define-data-var contract-owner principal tx-sender)
@@ -83,9 +84,9 @@
 			(next-cycle-expiry (+ (var-get current-cycle-expiry) week-in-milliseconds))
 		) 
 		;; Determine the value of the expired options NFT (pnl)
-		(try! (determine-value)) 
+		(try! (determine-value)) ;; TODO: Rename to determine-options-value
 		;; Create a settlement-pool for payouts to holders of in-the-money options NFTs
-		(try! (create-settlement-pool))
+		(try! (create-settlement-pool)) ;; TODO: Check if option-pnl > 0 before executing create-settlement-pool (improve execution cost)
 		;; Update the vault ledger distributing pnl to vault depositors and processing intra-week deposits and withdrawals
 		(try! (update-vault-ledger))
 		;; Create an options-ledger entry for the next cycle
@@ -245,8 +246,17 @@
 		)
 		(if (> expected-decrements applied-decrements)
 			(begin 
-				(var-set options-price-in-usd (some (- (unwrap-panic (var-get options-price-in-usd)) (* (- expected-decrements applied-decrements) (var-get auction-decrement-value)))))
-				(var-set auction-applied-decrements (+ (var-get auction-applied-decrements) u1))
+				(var-set options-price-in-usd 
+				(some 
+				 	(- 
+						(unwrap-panic (var-get options-price-in-usd)) 
+						(* 
+							(- expected-decrements applied-decrements) 
+							(var-get auction-decrement-value)
+						)
+					)
+				))
+				(var-set auction-applied-decrements expected-decrements)
 			)
 			true
 		)
@@ -288,7 +298,6 @@
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
 			;; Check if the cycle is epxired.
 			(cycle-expired (>= timestamp (var-get current-cycle-expiry)))
-
 		)
 		;; Check if the signer is a trusted oracle.
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
@@ -323,8 +332,9 @@
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
 		;; Check if an options-nft is available for sale. The contract can only sell as many options-nfts as there are funds in the vault
 		(asserts! (> (var-get options-for-sale) u0) ERR_OPTIONS_SOLD_OUT)
-		;; Check if auciton has run for more than 180 minutes, this ensures that the auction never runs longer than 3 hours thus reducing delta risk
-		;; (i.e. the risk of a unfavorable change in the price of the underlying asset)
+		;; Check if auciton has started and has not run for more than 180 minutes, 
+		;; Having the auction never run longer than 3 hours reduces the delta risk (i.e. the risk of a unfavorable change in the price of the underlying asset)
+		(asserts! (> timestamp (var-get auction-start-time)) ERR_AUCTION_CLOSED)
 		(asserts! (< timestamp (+ (var-get auction-start-time) (* min-in-milliseconds u180))) ERR_AUCTION_CLOSED)
 		;; Update the mint price based on where in the 180 min minting window we are
 		(unwrap! (update-options-price-in-usd timestamp) ERR_UPDATE_PRICE_FAILED)
@@ -356,19 +366,12 @@
     (
       (recipient tx-sender)
 			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
-			(token-expiry (get timestamp (unwrap-panic (find-options-ledger-entry token-id))))
-			(settlement-options-ledger-entry (try! (get-options-ledger-entry token-expiry)))
-			(option-pnl  (unwrap! (get option-pnl settlement-options-ledger-entry) ERR_NO_OPTION_PNL_AVAILABLE))
-			(first-token-id (get first-token-id settlement-options-ledger-entry)) 
-			(last-token-id (get last-token-id settlement-options-ledger-entry))
+			(token-expiry (get timestamp (unwrap-panic (find-options-ledger-entry token-id)))) ;; TODO add ERR to find-options-ledger-entry function and reorganize error handling in claim
+			(settlement-options-ledger-entry (unwrap! (get-options-ledger-entry token-expiry) ERR_OPTION_NOT_EXPIRED))
+			(option-pnl (unwrap-panic (get option-pnl settlement-options-ledger-entry)))
     )
 		;; Check if the signer is a trusted oracle
     (asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
-		;; Check if options is expired
-		(asserts! (> timestamp token-expiry) ERR_OPTION_NOT_EXPIRED) 
-		;; Check if provided token-id is in the range for the expiry
-		(asserts! (and (>= token-id first-token-id) (<= token-id last-token-id)) ERR_TOKEN_ID_NOT_IN_EXPIRY_RANGE)
-		;; Check if option-pnl for the options NFT is above zero (in-the-money)
 		(if (> option-pnl u0) 
 			(begin
 				;; Transfer options NFT to settlement contract
@@ -601,4 +604,17 @@
 
 (define-public (claim-settlement-from-options (amount uint) (recipient principal)) 
 	(as-contract (contract-call? .vault claim-settlement amount recipient))
+)
+
+(define-read-only (get-auction-applied-decrements) 
+	(var-get auction-applied-decrements)
+)
+
+;; auction-decrement-value
+;; #[allow(unchecked_data)]
+(define-public (set-auction-decrement-value) 
+	(begin
+		(asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_CONTRACT_OWNER)
+		(ok (var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)))
+	 ) ;; each decrement represents 2% of the start price
 )
