@@ -245,8 +245,17 @@
 		)
 		(if (> expected-decrements applied-decrements)
 			(begin 
-				(var-set options-price-in-usd (some (- (unwrap-panic (var-get options-price-in-usd)) (* (- expected-decrements applied-decrements) (var-get auction-decrement-value)))))
-				(var-set auction-applied-decrements (+ (var-get auction-applied-decrements) u1))
+				(var-set options-price-in-usd 
+				(some 
+				 	(- 
+						(unwrap-panic (var-get options-price-in-usd)) 
+						(* 
+							(- expected-decrements applied-decrements) 
+							(var-get auction-decrement-value)
+						)
+					)
+				))
+				(var-set auction-applied-decrements expected-decrements)
 			)
 			true
 		)
@@ -323,8 +332,9 @@
 		(asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
 		;; Check if an options-nft is available for sale. The contract can only sell as many options-nfts as there are funds in the vault
 		(asserts! (> (var-get options-for-sale) u0) ERR_OPTIONS_SOLD_OUT)
-		;; Check if auciton has run for more than 180 minutes, this ensures that the auction never runs longer than 3 hours thus reducing delta risk
-		;; (i.e. the risk of a unfavorable change in the price of the underlying asset)
+		;; Check if auciton has started and has not run for more than 180 minutes, 
+		;; Having the auction never run longer than 3 hours reduces the delta risk (i.e. the risk of a unfavorable change in the price of the underlying asset)
+		(asserts! (> timestamp (var-get auction-start-time)) ERR_AUCTION_CLOSED)
 		(asserts! (< timestamp (+ (var-get auction-start-time) (* min-in-milliseconds u180))) ERR_AUCTION_CLOSED)
 		;; Update the mint price based on where in the 180 min minting window we are
 		(unwrap! (update-options-price-in-usd timestamp) ERR_UPDATE_PRICE_FAILED)
@@ -601,4 +611,17 @@
 
 (define-public (claim-settlement-from-options (amount uint) (recipient principal)) 
 	(as-contract (contract-call? .vault claim-settlement amount recipient))
+)
+
+(define-read-only (get-auction-applied-decrements) 
+	(var-get auction-applied-decrements)
+)
+
+;; auction-decrement-value
+;; #[allow(unchecked_data)]
+(define-public (set-auction-decrement-value) 
+	(begin
+		(asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_CONTRACT_OWNER)
+		(ok (var-set auction-decrement-value (/ (unwrap-panic (var-get options-price-in-usd)) u50)))
+	 ) ;; each decrement represents 2% of the start price
 )
