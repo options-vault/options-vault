@@ -2,7 +2,7 @@ export { Clarinet, Tx, Chain, types, } from 'https://deno.land/x/clarinet@v1.0.4
 export type { Account, Block } from 'https://deno.land/x/clarinet@v1.0.4/index.ts';
 export { assertEquals } from 'https://deno.land/std@0.90.0/testing/asserts.ts';
 
-import { types, Tx, Chain, Account} from 'https://deno.land/x/clarinet@v1.0.4/index.ts';
+import { types } from 'https://deno.land/x/clarinet@v1.0.4/index.ts';
 
 export type PricePackage = {
 	prices: { symbol: string, value: any }[],

@@ -1,8 +1,9 @@
 ;; vault
-;; Contract that holds all the logic regarding to deposits, withdrawals, distributing pnl, settle a pnl pool and claiming pnl, as well as 
-;; storing user 1 types information in a ledger map to keep track of all the investors in the vault and keeps track of pnl owed to user 2 types
+;; Contract that holds all the logic for processing deposits and withdrawals, distributing pnl, creating a pnl settlement pool and claiming pnl,
+;; as well as containing a ledger map that keeps track of all investor balances as well as a settlement pool that holds all funds owed to in-the-money NFT holders.
 
 ;; constants
+
 (define-constant CONTRACT_ADDRESS (as-contract tx-sender))
 (define-constant OPTIONS_NFT_CONTRACT .options-nft)
 
@@ -12,9 +13,8 @@
 (define-constant ERR_TX_SENDER_NOT_IN_LEDGER (err u103))
 (define-constant ERR_ONLY_NFT_CONTRACT_ALLOWED (err u104))
 (define-constant ERR_TX_NOT_APPLIED_YET (err u105))
-(define-constant ERR_PREMIUM_NOT_SPLITTED_CORRECTLY (err u106))
-(define-constant ERR_SETTLEMENT_POOL_NOT_ENOUGH (err u107))
-(define-constant ERR_INSUFFICIENT_CONTRACT_FUNDS (err u108))
+(define-constant ERR_SETTLEMENT_POOL_NOT_ENOUGH (err u106))
+(define-constant ERR_INSUFFICIENT_CONTRACT_FUNDS (err u107))
 
 ;; data maps and vars
 
@@ -49,8 +49,6 @@
   (var-set investor-addresses (unwrap-panic (as-max-len? (append (var-get investor-addresses) investor) u1000)))
 )
 
-;; PRIVATE DEPOSITS FUNCTIONS
-
 ;; <process-deposits-updater>: Adds the pending-deposit amount (and resets it) to balance amount for each investor in the ledger,
 ;;                             also adds this amount to total-balances
 (define-private (process-deposits-updater (investor principal)) 
@@ -75,8 +73,6 @@
         (var-set total-pending-deposits (- (var-get total-pending-deposits) investor-pending-deposit))
   )
 )
-
-;; PRIVATE WITHDRAWAL FUNCTIONS
 
 ;; <process-withdrawals-updater>: Subtracts the pending-withdrawal amount (and resets it) from balance amount for each investor in the ledger
 ;;                                and make a transfer of the pending-withdrawal amount from the vaul contract to the investor's address, but 
@@ -126,8 +122,6 @@
   (is-some (map-get? ledger investor))
 )
 
-;; PRIVATE PNL FUNCTIONS 
-
 ;;<pnl-evaluator>: Calculates the pnl for each investor's participation in the vault, updates its balance and updates the total-balances
 ;;                 that summarize all the investor's balances in the ledger 
 (define-private (pnl-evaluator (investor principal)) 
@@ -154,8 +148,6 @@
 )
 
 ;; public functions
-
-;; PUBLIC DEPOSITS FUNCTIONS
 
 ;; <process-deposits>: The function iterates over the `investor-addresses` list and applies the `pending-deposits` amount to 
 ;;                     the investor's ledger `balance`.
@@ -211,8 +203,6 @@
   )
 )
 
-;; PUBLIC WITHDRAWAL FUNCTIONS
-
 ;; <process-withdrawals>: The function iterates over the `investor-addresses` list and applies the `pending-withdrawal` amount to the investor's
 ;;                        ledger `balance`. If the investor has the necessary balance available the function processes the withdrawal by sending
 ;;                        an on-chain STX transfer for the requested amount.
@@ -248,8 +238,6 @@
   )
 )
 
-;; PUBLIC PNL FUNCTIONS
-
 ;;<distribute-pnl>: The function distributes the cycle's profit and loss (pnl) to the investor's in the ledger on a pro-rata basis.
 (define-public (distribute-pnl)
   (begin
@@ -263,8 +251,6 @@
     (ok true)
   )
 )
-
-;; PUBLIC SETTLEMENT FUNCTIONS
 
 ;; <create-settlement-pool>: The function allows options-nft contract to ask vault contract to reserve the STX amount owed to the
 ;;                           cycle's NFT holders, creating a settlement-pool. It is called by the options-nft contract as part of the logic
