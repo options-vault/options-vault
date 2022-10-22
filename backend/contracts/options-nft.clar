@@ -408,11 +408,11 @@
 )
 
 ;; CONTRACT OWNERSHIP HELPER FUNCTIONS
-
+;; #[allow(unchecked_data)]
 (define-public (set-contract-owner (new-owner principal))
 	(begin
 		(asserts! (is-eq (var-get contract-owner) tx-sender) ERR_NOT_CONTRACT_OWNER)
-		(ok (var-set contract-owner tx-sender))
+		(ok (var-set contract-owner new-owner))
 	)
 )
 

@@ -30,11 +30,7 @@
 ;; private functions
 
 ;; Balance private helper functions
-(define-private (add-to-balance (amount uint) (investor principal)) 
-  (+ (default-to u0 (get-investor-balance investor)) amount)
-)
-
-(define-private (subtract-to-balance (amount uint) (investor principal)) 
+(define-private (subtract-from-balance (amount uint) (investor principal)) 
   (- (default-to u0 (get-investor-balance investor)) amount)
 )
 
@@ -43,15 +39,7 @@
   (+ (get-pending-deposit) amount)
 )
 
-(define-private (subtract-pending-deposit (amount uint)) 
-  (- (get-pending-deposit) amount)
-)
-
 ;; Withdrawal private helper functions
-(define-private (subtract-pending-withdrawal (amount uint)) 
-  (-  (get-pending-withdrawal) amount)
-)
-
 (define-private (add-pending-withdrawal (amount uint))
   (+ (get-pending-withdrawal) amount)
 )
@@ -114,7 +102,7 @@
                   investor-info
                   {
                     balance: 
-                      (subtract-to-balance investor-withdrawal-allowed investor),
+                      (subtract-from-balance investor-withdrawal-allowed investor),
                     pending-withdrawal:
                       u0
                   }  
@@ -328,22 +316,6 @@
 ;; TESTING HELPER FUNCTIONS
 ;; (!) For testing purposes only, not to be deployed to production (!)
 ;; (!) Delete these functions for deployment to improve contract security and cost efficiency (!)
-
-(define-read-only (get-temp-total-balances) 
-  (var-get temp-total-balances)
-)
-
-(define-read-only (get-investors-list) 
-  (var-get investor-addresses)
-)
-
-(define-read-only (get-contract-balance) 
-  (stx-get-balance CONTRACT_ADDRESS)
-)
-
-(define-read-only (get-pending-deposits) 
-  (var-get total-pending-deposits)
-)
 
 (define-read-only (get-total-settlement-pool) 
   (var-get total-settlement-pool)
