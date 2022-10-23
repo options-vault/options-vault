@@ -1,25 +1,27 @@
 # :moneybag: Options Vaults :moneybag:
-## A Stacks DeFi app that automates covered call writing to generate yield
+## A Stacks DeFi app that automates covered call writing to generate sustainable, risk-adjusted yield.
 
-Options yield vaults give you the ability to allocate your crypto to an automated options strategy to generate income.  All you need to do is deposit crypto into our vault and the Clarity smart contracts execute a simple [covered call](https://www.investopedia.com/terms/c/coveredcall.asp) options arbitrage strategy for you.
+Options vaults allow you to allocate your crypto to an automated options yield strategy. All STX deposited into the options vault become available to a set of Clarity smart contracts that execute a simple [covered call](https://www.investopedia.com/terms/c/coveredcall.asp) options writing strategy.
 
-This strategy sells one week options contracts (represented as NFTs) against the crypto in the vault. Since the strike price of the option is 15% above the underlying spot price, most of the weekly option contracts expiry worthless (the option is ["out-of-the-money"](https://www.thestreet.com/dictionary/o/out-of-the-money)).
+The strategy sells one week options contracts (represented as NFTs) against the STX in the vault. The options contracts, sold deeply ["out-of-the-money"](https://www.thestreet.com/dictionary/o/out-of-the-money), statistically mostly expire worthless putting a steady stream of premium payments into the vault investor's pocket. 
 
-The net result is a strategy that in bearish and mildly bullish market conditions puts a stead stream of income payments in the investor's pocket. Only in extremely bullish market conditions, with fast and steep price appreciations, does the strategy become unprofitable.
+The call option contract sold by the vault gives the buyer the right (but not the obligation) to buy one STX 15% above the current market price in one week from now from the vault. In other words, the call option contract only lose money for the vault if STX goes up by **more than 15% in one week**.  
+
+The net result is a strategy that in bearish and mildly bullish market conditions puts a steady stream of income payments into the vault's pocket - over the last year the APY for this strategy has been around 20%. Only in **extremely bullish** market conditions, a market with fast _and_ steep price appreciation, does the strategy become unprofitable.
+
+This protocol's longer-term goal is to provide structured investment products including but not limited to the covered call strategy to the Stacks and Bitcoin community.
 
 ## Why Options Arbitrage?
 
-Derivatives arbitrage strategies are a time-tested way to generate yield. Using options and futures contracts, these strategies can generate steady income
-streams in specific market conditions **without liquidation risk**.
+Options arbitrage strategies are a time-tested way to generate yield. These strategies can generate steady income streams in specific market conditions **without liquidation risk**.
 
-Most importantly though the strategies' success does not rely on the emission of inflationary protocol tokens as widely observed in [Automated Market Making](https://www.gemini.com/cryptopedia/amm-what-are-automated-market-makers) protocols.
-This makes the strategies inherently **sustainable** and gives the user the ability to generate income in bearish market conditions.
+Most importantly they don't rely on the emission of inflationary protocol tokens as widely observed in [Automated Market Making](https://www.gemini.com/cryptopedia/amm-what-are-automated-market-makers) protocols, which gives the user the ability to generate sustainable, risk-adjusted income across market conditions.
 
 ## Why Automation Via Smart Contracts?
 
 A certain level of financial acumen is required to execute these strategies successfully and therefore, in the traditional financial system, they have mainly been employed by financial institutions and sophisticated high net worth individuals.
 
-We believe that by automating the execution using Clarity smart contracts we can make these strategies available to a much wider audience. In our opinion, this is a crucial step towards a truly open and democratized financial system. A financial system that makes sophisticated arbitrage strategies accessible to anybody with a Stacks account and without the need to give up custody over your assets.
+We believe that by automating the execution using Clarity smart contracts, we can make these strategies available to a much wider audience. In our view, this is a crucial step towards a truly open and democratized financial system. A financial system that makes sophisticated arbitrage strategies accessible to anybody with a Stacks account and without the need to give up custody over your assets.
 
 Stacks is in a unique position to become the smart contracting layer for Bitcoin and by extension the home of Bitcoin DeFi. In making sustainable yield strategies available on Stacks we believe that we can help unlock the ecosystem's potential and contribute to accelerated user adoption.
 
@@ -33,23 +35,23 @@ Stacks is in a unique position to become the smart contracting layer for Bitcoin
 - **User 2 (Speculator)**: Buys call option on STX to profit from price appreciation
 
 ### Simplified User Flow
-Let's take a look at the simplified **user flow**
+Let's take a look at the simplified **user flow** as depicted above
 
-(1) User 1 deposits STX to the vault contract\
-(2) The vault makes the deposited STX available to the auction\
-(3) The auction sells one week call options on STXUSD for 15% above the spot price to user 2\
-(4) The option buyer gets send an NFT which represents the call option\
+>(1) The yield invstor (user 1) deposits STX to the vault contract\
+>(2) The vault makes the deposited STX available to the auction\
+>(3) The auction sells one week call options on STXUSD for 15% above the spot price to the speculator (user 2)\
+>(4) The option buyer (user 2) receives an NFT which represents a call option\
 
-**Scenario 1**: Option holds value at expiry ("in-the-money")\
-(5) User 2 sends options NFT to settlement contract\
-(6) The settlement contract, using a price provided by a [Redstone](https://www.redstone.finance) oracle, determines the value of the option\
-(7) The settlement contract sends the option value to user 2
+**Scenario 1**: Option holds value at expiry ("in-the-money")
+>(5) User 2 sends the options NFT to the settlement contract to claim his profit\
+>(6) The settlement contract, using a price provided by a [Redstone](https://www.redstone.finance) oracle, determines the value of the options NFT\
+>(7) The settlement contract pays out the profit to user 2
 
-**Scenario 2**: Option expires worthless ("out-of-the-money")\
-(7) The auction contract pays out the proceeds from selling the options contracts to the vault\
-(8) User 1 has the option to withdraw 
+**Scenario 2**: Option expires worthless ("out-of-the-money")
+>(7) The auction contract pays out the proceeds from selling the options contracts to the vault\
+>(8) User 1 has the option to withdraw his funds from the vault every week
 
-_Side note: the current implementation uses STX as the underlying asset. However, with only slight changes to less than 5% of the codebase, the contract could be used with any other asset on the Satcks blockchain. And with the help of dlc.link technology option yield vaults containing native Bitcoin and paying out native Bitcoin yields could be created - this is the long-term vision of the project._
+_Side note: the current implementation uses STX as the underlying asset. However, with only slight changes to less than 5% of the codebase, the contract will be able to be used with any other asset on the Satcks blockchain. And with the help of dlc.link technology option vaults containing native Bitcoin and paying out native Bitcoin yields could be created as well - this is the long-term vision of the project._
 
 ## How does it work? - Let's dig deeper
 
@@ -63,7 +65,7 @@ The Dapp is comprised of **two smart contracts**:
   - keeps an internal ledger tracking each principal's balance 
   - allows for deposits and withdrawals 
 
-(2) The `options-nft` contract which contains a
+(2) The `options-nft` contract which contains
   - a function to receive Redstone timestamp and price data
   - the logic to algorithmically determine and set the options strike price
   - a mechanism that sells option NFTs via a simple auction 
@@ -71,94 +73,106 @@ The Dapp is comprised of **two smart contracts**:
   - a function that allows user 2 to claim the value of an in-the-money option NFT from the settlement pool
 
 ### Calendar time vs. block time
-In order to offer options contract with calendar expiry dates (instead of block times), we use a Redstone oracle as a reliable, decentralized source for feeding calendar timestamps (and the corresponding STXUSD prices) to our smart contracts. A server streams the Redstone data packages to our options-nft smart contract in pre-deteremined time intervals. (Note: the current implementation does _not_ include the server).
+In order to offer options contract with calendar expiry dates (which conforms with market wide standards), we use a Redstone oracle as a reliable, decentralized source for calendar timestamps (and the corresponding STXUSD prices). A server streams the Redstone data packages to our options-nft smart contract in pre-deteremined time intervals. (Note: the current implementation does _not_ include the server).
 
 ### Cycles
 
-![Cycle Overview](https://github.com/options-vault/options-vault/blob/dev/assets/cycle-overview-3.png)
+![Cycle Overview](https://github.com/options-vault/options-vault/blob/dev/assets/cycle-overview-6.png)
 
 The whole app revolves around a one week cycle. The variable `current-cycle-expiry`, which holds the UNIX timestamp of the current cycle's epxiry. This variable acts as the contract's internal clock. 
 
 A cycle plays out as follows:
 
 **I. Auction**\
-During a 3hr auction that decreases the price by 2% increments every 30min (dutch auction), user 2 gets the ability to buy options NFTs representing **call** options on STXUSD. The options have a one week expiry (every Friday @ 4pm GMT) and a strike price 15% above the current STXUSD price. 
+During a 3hr auction that decreases the price in 2% increments every 30min (dutch auction), user 2 gets the ability to buy NFTs representing **call** options on STXUSD. The options have a one week expiry (every Friday @ 4pm GMT) and a strike price 15% above the current STXUSD price. 
 
 **II. Settlement**\
 Once the option has expired the contract calculates the options NFT's value (`options-pnl`). This vaule being either positive (in-the-money) or zero (out-of-the-money) determines the distribution of the contract's funds between the options NFT holders and the vault.
 
 A) Settlement with options NFT holders (user 2)
-- _In-the-money scenario_: If the option is in-the-money the contract creates a `settlement-pool` that holds all STX owed to options NFT holders. Holders can subsequently call the `claim` function, send their option NFT to the contract and get the value of their option NFT transferred to their address. The option NFT effectively acts as a bearer asset representing a claim on the STX in the settlement-pool.
+- _In-the-money scenario_: If the option is in-the-money the contract creates a `settlement-pool` that holds all STX owed to options NFT holders. Holders can subsequently call the `claim` function, send their option NFT to the contract and receive profit from the contract paid out in STX. The option NFT effectively acts as a bearer asset representing a claim on the STX in the settlement-pool.
 - _Out-of-the-money scenario_: If the option expires worthless no settlement pool is created, the funds remain in the vault.
 
 B) Settlement with the vault (user 1)
 
-Independently from the value of the options NFT, the balances of the vault's internal `ledger` need to be updated. The `distribute-pnl` function distributes the cycles' profit or loss (pnl) to the investor's in the vault by updating every user's ledger `balance`.
+Independently from the value of the options NFT, the balances of the vault's internal `ledger` gets updated after every cycle: The `distribute-pnl` function distributes the cycles' profit or loss (pnl) to the investors in the vault and updates every user's ledger `balance`.
 
 **III. Ledger updates and payement processing**\
-Intra-week deposits and withdrawals are kept seperate from the vault `balance` and are tracked in the `pending-deposits` and `pending-withdrawal` ledger entries. Once the settlement process has been completed, the vault contract processes both deposits and withdrawals and sends the corresponding on-chain transactions. Note that deposits are processed on-chain immediately when requested by the user, while Withdrawals are only sent in bulk at the end of every cycle.
+Intra-week deposits and withdrawals are kept seperate from the vault `balance` and are tracked in the `pending-deposit` and `pending-withdrawal` ledger entries. Once the settlement process is completed, the vault contract processes both deposits and withdrawals and sends the corresponding on-chain transactions. Note that deposits are processed on-chain immediately when requested by the user, while Withdrawals are only broadcast to the network in bulk at the end of every cycle.
 
 ### Detailed description of the functions in the `options-nft` contract
 
-TODO [ADD IMAGE THAT SHOWS CYCLE BUT WITH FUNCTION NAMES EXECUTED FOR EACH BLOCK]
+![Cycle Overview With Functions](https://github.com/options-vault/options-vault/blob/dev/assets/cycle-overview-with-functions-2.png)
 
-TODO (Split into public and prive functions)
+#### Cycle Start
 
-**:star2: _`submit-price-data`_**
+**:star2: _`init-auction`_**
 
-The function receives Redstone data packages from the server and verifies if the data has been signed by a trusted Redstone oracle's public key. The function additionally contains a time-based control flow that can trigger `end-currrent-cycle`, `update-ledger` and `init-next-cycle` based on when in the cycle it is called. The first time price and time data gets submitted _after_ `current-cycle-expiry`, end-current-cycle gets executed with `determine-value-and-settle` containing the majority of the business logic. If the cycle's options NFT is in-the-money a `settlement-pool` gets created. In this case the control flow in `submit-price-data` waits until _after_ the settlement transaction has been mined before executing `update-vault-ledger` and `init-next-cycle`.
+The function sets the `next-cycle-expiry` date, calls `calculate-strike` to determine the next cycles strike price and creates a new entry in the `opions-ledger`. It sets the USD price by calling `set-options-price` and then determines and sets a series of variables for the upcoming auction":
+- the `auction-starttime` is 2 hours after the last cycyles expiry
+- the `auction-decrement-value` is 2% of the `options-price-in-usd`
+- the `auction-decrements-applied` are reset to zero.
+- the `options-for-sale` value is set to the vault's `total-balances`, ensuring that any options NFT sold in the auction is 1:1 covered by a STX in the vault (hence "covered call" strategy)
 
-
-**:star2: _`end-current-cycle`_**
-
-The function is only executed once the current-cycle is expired. It calls `determine-value-and-settle` and adds the expired cycles information to the `options-ledger-list`.
-
-
-**:star2: _`determine-value-and-settle`_**
-
-The function calculates the expired option's value and updates the `options-ledger` entry with the corresponding `option-pnl` (profit and loss). If the `option-pnl` is positive, the function calls the `create-settlement-pool` method in the vault contract.
-
-
-**:star2: _`update-vault-ledger`_**
-
-The function calls three methods in the vault contract: `distribute-pnl`, `process-deposits` and `process-withdrawals`.
-
-
-**:star2: _`init-next-cycle`_**
-
-The function sets the `next-cycle-expiry` date and then calls `calculate-strike` to determine the next cycles strike price. It then uses the information to create a new entry in the `opions-ledger`. It sets the USD price by calling `set-options-price` and then determines and sets a series of variables for the upcoming auction":
-- The `auction-starttime` is 2 hours after the last cycyles expiry
-- The `auction-decrement-value` is 2% of the `options-price-in-usd`
-- The `options-for-sale` value is set to the vault's `total-balances`, ensuring that any options NFT sold in the auction is 1:1 covered by a STX in the vault
-
-It finally sets `current-cycle-expiry` to one week after the last expiry date.
-
-
-**:star2: _`calculate-strike`_**
-
-A simple calculation to set the strike price 15% higher than the current price of the underlying asset. In the next iteration we intend to replace this simplified calculation with a calculation that takes more variables (i.e. volatility) into account. Since the beginning of the auction is somewhat variable (there is a small chance that it starts later than normal-start-time) it would help risk-management to make the calculate-strike and/or the set-optons-price functions dependent on the time-to-expiry, which would allow to more accurately price the option's time value.
-
-
-**:star2: _`set-options-price`_**
-
-The price is determined using a simplified calculation that sets `options-price-in-usd` to 0.5% of the `stxusd-rate`. If all 52 weekly options for a year expiry worthless, a uncompounded 26% APY would be achieved by this pricing strategy. In the next iteration we intend to replace this simplified calculation with the Black Scholes formula - the industry standard for pricing European style options.
-	
+#### Auction
 
 **:star2: _`mint`_**
 
-The mint function allows user 2 to purchase options NFTs during a 3 hour auction window. The function receives pricing data from a Redstone oracle and verifies that it was signed by a trusted public key. The function calls `update-options-price-in-usd` which decrements tthe `options-price-in-usd` by 2% every 30 minutes. Subsequently, the function calls `deposit-premium` in the vault contract which transfers the STX equivalent of the `options-price-in-usd` (which is calculated by `get-update-latest-price-in-stx`) from the user to the vault contract and in return the user receives an `options-nft`. Finally, the function updates the `last-token-id` in the `options-ledger` to the newly minted options NFTs `token-id`.
+The mint function allows users to purchase options NFTs during a 3 hour auction window. The function receives pricing data from a Redstone oracle and verifies that it was signed by a trusted public key. The function interacts with update-options-price-in-usd which decrements the options-price-in-usd by 2% every 30 minutes. The options NFT is priced in USD, but the sale is settled in STX - get-update-latest-price-in-stx handles the conversion.
 
+#### Settlement
 
-**:star2: _`update-options-price-in-usd`_**
+**:star2: _`submit-price-data`_**
 
-The function decrements the `options-price-in-usd` by 2% every 30 minutes.
+The function receives Redstone data packages from the server and verifies if the data has been signed by a trusted Redstone oracle's public key. The function additionally contains a time-based control flow that can trigger `transition-to-next-cycle` if the cycle has expred.
 
+**:star2: _`transition-to-next-cycle`_**
+
+The function is only executed once, after current-cycle is expired. It calls series of functions that `determine-value` of the expired cycle, `create-settlementpool` if the option NFT holds value, reflect all changes in the internal ledger system (`update-vault-ledger` and `update-options-ledger`) and initializes the auction for the next cycle.
+
+It finally moves the watches of the inernal clock, and sets `current-cycle-expiry` to one week in the future.
+
+**:star2: _`determine-value`_**
+
+The function calculates the value of the expired options NFT and updates the `options-ledger` entry with the corresponding `option-pnl` (profit and loss).
+
+**:star2: _`create-settlement-pool`_**
+
+If the `option-pnl` is positive, the function calls the `create-settlement-pool` method in the vault contract, which allocates all funds needed to pay back options NFT holder for the week to a seperate account. 
 
 **:star2: _`claim`_**
 
-The claim function allows user 2 to send in an option NFT and claim the STX equivalent of the `option-pnl` at expiry.  The function receives pricing data from a Redstone oracle and verifies that it was signed by a trusted public key. It additionally receives the `token-id` of the option NFT that is to be claimed. Via the `find-expiry` method the function determines the expiry-date of the NFT by traversing the `options-ledger-list` looking for the `cycle-tuple` entry that corresponds to the `token-id`. If `option-pnl` is above zero the contract sends a STX transfer to the NFT holder.
+The claim function allows users to send an option NFT to the options-nft contract and claim the STX equivalent of the `option-pnl` at expiry.  The function receives pricing data from a Redstone oracle and verifies that it was signed by a trusted public key. It additionally receives the `token-id` of the option NFT that is to be claimed. Via the `find-options-ledger-entry` method the expiry-date of the NFT is determined.  If the `option-pnl` is above zero the contract sends a STX transfer to the NFT holder.
+
+#### Update ledger and process payments
+
+**:star2: _`update-vault-ledger`_**
+
+The function updates the vault ledger by reflecting the cycle's option-pnl in investor balances and processes the intra-cycle deposits and withdrawals.
+
+**:star2: _`update-options-ledger`_**
+
+The function creates an options-ledger entry for the next cycle.
+
+#### Helper functions
+
+**:star2: _`calculate-strike`_**
+
+Sets the strike price of the options NFT 15% above the current price of the underlying asset. In the next iteration we intend to replace this with a calculation that takes more variables (i.e. volatility) into account.
+
+**:star2: _`set-options-price`_**
+
+The price is determined using a simplified calculation that sets `options-price-in-usd` to 0.5% of the `stxusd-rate`. If all 52 weekly options for a year expiry worthless, an uncompounded 26% APY would be achieved by this pricing strategy. In the next iteration we intend to replace this simplified calculation with the *Black Scholes formula* - the industry standard for pricing European style options.
+
+**:star2: _`update-options-price-in-usd`_**
+
+The function decrements the `options-price-in-usd` by 2% every 30 minutes during the 3 hour auction. If the `epexted-decrements` are higher than the `applied-decrements`, the necessary decrements are applied to the options-price-in-usd.
 
 ### Detailed description of the functions in the `vault` contract
+
+[TODO: Add cycle overview mapped against functions in the vault contract]
+
+TODO: Organize below functions according to phases in the picture
 
 **:star2: _`queue-deposit`_**
 
@@ -187,6 +201,18 @@ The function transfers the STX amount paid by user 2 for minting an options NFT 
 **:star2: _`distribute-pnl`_**
 
 The function distributes the cycle's profit and loss (pnl) to the investors in the `ledger` on a pro-rata basis.
+
+## Testing
+
+[Image of LCOV Test coverage]
+
+unit testing + end-to-end testing
+
+## Thank yous
+
+We want to thank @Marvin Jansen for writing the Redstone connect
+
+We want to thank @chiara and @Aakanasha for teaching us the foundational skills in Clarity during Clarity Camp cohort 4.
 
 ## License
 
