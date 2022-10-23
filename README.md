@@ -5,7 +5,7 @@ Options vaults allow you to allocate your crypto to an automated options yield s
 
 The strategy sells one week options contracts (represented as NFTs) against the STX in the vault. The options contracts, sold deeply ["out-of-the-money"](https://www.thestreet.com/dictionary/o/out-of-the-money), mostly expire worthless, putting a steady stream of premium payments into the vault investor's pocket. 
 
-The call option contract sold by the vault gives the buyer the right (but not the obligation) to buy one STX 15% above the current market price in one week from now from the vault. In other words, the call option contract only loses money for the vault if STX goes up by **more than 15% in one week**.  
+The call option contract sold by the vault gives the buyer the right (but not the obligation) to buy one STX 15% above the current market price in one week from now. In other words, the call option contract only loses money for the vault if STX goes up by **more than 15% in one week**.  
 
 The net result is a strategy that, in bearish and mildly bullish market conditions, puts a steady stream of income payments into the vault's pocket - over the last year the APY for this strategy has been roughly 20%. Only in **extremely bullish** market conditions, a market with fast _and_ steep price appreciation, does the strategy become unprofitable.
 
@@ -79,7 +79,7 @@ In order to offer options contract with calendar expiry dates (which conforms wi
 
 ![Cycle Overview](https://github.com/options-vault/options-vault/blob/dev/assets/cycle-overview-6.png)
 
-The app works in one-week cycles. The variable `current-cycle-expiry` holds the UNIX timestamp of the current cycle's expiry and acts as the contract's internal clock. 
+The app has a sort of heartbeat. It all revolves around a weekly cycle that contains a number of different phases (auction, settlement, ledger updates, payouts - see image above). The variable `current-cycle-expiry` holds the UNIX timestamp of the current cycle's expiry and acts as the contract's internal clock. 
 
 A cycle plays out as follows:
 
