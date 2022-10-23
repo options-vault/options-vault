@@ -11,11 +11,36 @@ The net result is a strategy that, in bearish and mildly bullish market conditio
 
 This protocol's longer-term goal is to provide structured investment products including but not limited to the covered call strategy to the Stacks and Bitcoin community.
 
+# Content  
+1. [Why Options Arbitrage?](#optionsArbitrage)  
+2. [Why Automation Via Smart Contracts?](#wavsc)  
+3. [How does it work? - TL;DR](#hdiw)  
+    - [Two User Types Contracts?](#tut)
+    - [Simplified User Flow](#suf)
+4. [How does it work?](#largehdiw) 
+    - [Smart contract design](#scd)
+    - [Calendar time vs. block time](#ctvbt)
+    - [Cycles](#cycles)
+5. [Description of the `options-nft` contract](#dotonc) 
+    - [Data variables and maps](#dvamon)
+    - [Functions](#funcon)
+6. [Description of the `vault` contract](#dotvc) 
+    - [Data variables and maps](#dvamvc)
+    - [Functions](#funcvc)
+7. [Testing](#testing) 
+8. [Glossary](#glossary) 
+9. [Special Thanks](#specialt)
+9. [License](#license)
+    
+<a name="optionsArbitrage"/>
+
 ## Why Options Arbitrage?
 
 Options arbitrage strategies are a time-tested way to generate yield. These strategies can generate steady income streams in specific market conditions **without liquidation risk**.
 
 Most importantly they don't rely on the emission of inflationary protocol tokens as widely observed in [Automated Market Making](https://www.gemini.com/cryptopedia/amm-what-are-automated-market-makers) protocols, which gives the user the ability to generate sustainable, risk-adjusted income across market conditions.
+
+<a name="wavsc"/>
 
 ## Why Automation Via Smart Contracts?
 
@@ -25,14 +50,20 @@ We believe that by automating the execution using Clarity smart contracts, we ca
 
 Stacks is in a unique position to become the smart contracting layer for Bitcoin, and by extension the home of Bitcoin DeFi. In making sustainable yield strategies available on Stacks we believe that we can help unlock the ecosystem's potential and contribute to accelerated user adoption.
 
+<a name="hdiw"/>
+
 ## How does it work? - A high-level overview
 
 ![App Overview](https://github.com/options-vault/options-vault/blob/dev/assets/options-vault-overview-wide.png)
+
+<a name="tut"/>
 
 ### Two User Types
 
 - **User 1 (Yield Investor)**: Deposits STX into the vault to generate income via the covered call strategy
 - **User 2 (Speculator)**: Buys call option on STX to profit from price appreciation
+
+<a name="suf"/>
 
 ### Simplified User Flow
 Let's take a look at the simplified **user flow** as depicted above
@@ -53,9 +84,13 @@ Let's take a look at the simplified **user flow** as depicted above
 
 _Side note: the current implementation uses STX as the underlying asset. However, with only slight changes to less than 5% of the codebase, the contract can be used with any other asset on the Stacks blockchain. And with the help of dlc.link technology, option vaults containing native Bitcoin and paying out native Bitcoin yields could be created as well - this is the long-term vision of the project._
 
+<a name="largehdiw"/>
+
 ## How does it work? - Let's dig deeper
 
 The preceding high-level overview covers the key features of the system, but let's now go a layer deeper and look at the contract mechanics under the hood.
+
+<a name="scd"/>
 
 ### Smart contract design
 The Dapp is comprised of **two smart contracts**:
@@ -72,8 +107,12 @@ The Dapp is comprised of **two smart contracts**:
   - the logic to calculate the value of an expired option NFT and create a settlement pool with all the funds owed to user 2
   - a function that allows user 2 to claim the value of an in-the-money option NFT from the settlement pool
 
+<a name="ctvbt"/>
+
 ### Calendar time vs. block time
 In order to offer options contract with calendar expiry dates (which conforms with market-wide standards), we use a Redstone oracle as a reliable, decentralized source for calendar timestamps (and the corresponding STXUSD prices). A server streams the Redstone data packages to our options-nft smart contract in pre-determined time intervals. (Note: the current implementation does _not_ include the server).
+
+<a name="cycles"/>
 
 ### Cycles
 
@@ -103,7 +142,11 @@ Independently from the value of the options NFT, the balances of the vault's int
 
 Intra-week deposits and withdrawals are kept separate from the vault `balance` and are tracked in the `pending-deposit` and `pending-withdrawal` ledger entries. Once the settlement process is completed, the vault contract processes both deposits and withdrawals and sends the corresponding on-chain transactions. Note that deposits are processed on-chain immediately when requested by the user, while withdrawals are only broadcast to the network in bulk at the end of every cycle.
 
+<a name="dotonc"/>
+
 ### Description of the `options-nft` contract
+
+<a name="dvamon"/>
 
 ### 1) Data variables and maps
 
@@ -127,6 +170,7 @@ The options-price-in-usd variable represents the USD price of one options NFT co
 
 The options-for-sale variable represents the amount of options NFTs the `mint` function is able to sell. The amount is determined by the `total-balances` variable in the `vault` contract, ensuring that the contract can never sell more options NFT contract as there are STX in the vault.
 
+<a name="funcon"/>
 
 ### 2) Functions
 
@@ -196,7 +240,11 @@ The price is determined using a simplified calculation that sets `options-price-
 
 The function decrements the `options-price-in-usd` by 2% every 30 minutes during the 3 hour auction. If the `expected-decrements` are higher than the `applied-decrements`, the necessary decrements are applied to the options-price-in-usd.
 
+<a name="dotvc"/> 
+
 ### Description of the `vault` contract
+
+<a name="dvamvc"/>
 
 ### 1) Data variables and maps
 
@@ -223,6 +271,8 @@ The total-pending-deposits variable holds a uint number representing the sum of 
 **:card_file_box: `total-settlement-pool`**
 
 The total-settlement-pool variable holds a uint number representing the number of STX in the settlement pool. The settlement pool is used to pay out all STX claims from in-the-money options NFT holders.
+
+<a name="funcvc"/>
 
 ### 2) Functions
 
@@ -264,6 +314,8 @@ The function iterates over the `investor-addresses` list and applies the `pendin
 
 The function iterates over the `investor-addresses` list and applies the `pending-withdrawal` amount to the investor's ledger `balance`. If the investor has the necessary balance available, the function processes the withdrawal by sending an on-chain STX transfer for the requested amount.
 
+<a name="testing"/>
+
 ## Testing
 
 ![Code Coverage Report](https://github.com/options-vault/options-vault/blob/dev/assets/code-coverage-report.png)
@@ -287,6 +339,8 @@ $ brew install lcov
 $ genhtml coverage.lcov
 $ open index.html
 ```
+
+<a name="glossary"/>
 
 ## Glossary
 
@@ -322,12 +376,15 @@ The expiry date is the UNIX timestamp (in milliseconds) at which the value of th
 
 The pnl or "profit and loss" refers to the value of the options NFT contract at `expiry`.
 
+<a name="specialt"/>
 
 ## Special Thanks
 
 We would like to thank [Marvin Janssen](https://github.com/MarvinJanssen) for writing the [Redstone-Clarity-connector](https://github.com/MarvinJanssen/redstone-clarity-connector) contracts which we have integrated into our codebase.
 
 We would like to thank [Ciara](https://github.com/proiacm) and [Aakanasha](https://github.com/amahajan87) for teaching us foundational Clarity skills during [Clarity Camp](https://clarity-lang.org/universe#camps) cohort 4.
+
+<a name="license"/>
 
 ## License
 
