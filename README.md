@@ -106,8 +106,6 @@ Intra-week deposits and withdrawals are kept seperate from the vault `balance` a
 
 #### Cycle Start
 
-#### Auction
-
 **:star2: _`init-auction`_**
 
 The function sets the `next-cycle-expiry` date, calls `calculate-strike` to determine the next cycles strike price and creates a new entry in the `opions-ledger`. It sets the USD price by calling `set-options-price` and then determines and sets a series of variables for the upcoming auction":
@@ -115,6 +113,8 @@ The function sets the `next-cycle-expiry` date, calls `calculate-strike` to dete
 - the `auction-decrement-value` is 2% of the `options-price-in-usd`
 - the `auction-decrements-applied` are reset to zero.
 - the `options-for-sale` value is set to the vault's `total-balances`, ensuring that any options NFT sold in the auction is 1:1 covered by a STX in the vault (hence "covered call" strategy)
+
+#### Auction
 
 **:star2: _`mint`_**
 
@@ -204,7 +204,15 @@ The function distributes the cycle's profit and loss (pnl) to the investors in t
 
 ## Testing
 
-## Credit
+[Image of LCOV Test coverage]
+
+unit testing + end-to-end testing
+
+## Thank yous
+
+We want to thank @Marvin Jansen for writing the Redstone connect
+
+We want to thank @chiara and @Aakanasha for teaching us the foundational skills in Clarity during Clarity Camp cohort 4.
 
 ## License
 
