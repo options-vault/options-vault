@@ -11,13 +11,13 @@ The net result is a strategy that, in bearish and mildly bullish market conditio
 
 This protocol's longer-term goal is to provide structured investment products including but not limited to the covered call strategy to the Stacks and Bitcoin community.
 
-# Content  
+## Table of Contents  
 1. [Why Options Arbitrage?](#optionsArbitrage)  
 2. [Why Automation Via Smart Contracts?](#wavsc)  
 3. [How does it work? - TL;DR](#hdiw)  
     - [Two User Types Contracts?](#tut)
     - [Simplified User Flow](#suf)
-4. [How does it work?](#largehdiw) 
+4. [How does it work? - Let's dig deeper](#largehdiw) 
     - [Smart contract design](#scd)
     - [Calendar time vs. block time](#ctvbt)
     - [Cycles](#cycles)
@@ -52,7 +52,7 @@ Stacks is in a unique position to become the smart contracting layer for Bitcoin
 
 <a name="hdiw"/>
 
-## How does it work? - A high-level overview
+## How does it work? - TL;DR
 
 ![App Overview](https://github.com/options-vault/options-vault/blob/dev/assets/options-vault-overview-wide.png)
 
