@@ -1,5 +1,5 @@
 # :moneybag: Options Vaults :moneybag:
-## A Stacks DeFi app that automates covered call writing to generate sustainable, risk-adjusted yield.
+### A Stacks DeFi app that automates covered call writing to generate sustainable, risk-adjusted yield.
 
 Options vaults allow you to allocate your crypto to an automated options yield strategy. All STX deposited into the options vault become available to a set of Clarity smart contracts that execute a simple [covered call](https://www.investopedia.com/terms/c/coveredcall.asp) options writing strategy.
 
@@ -83,10 +83,12 @@ The whole app revolves around a one week cycle. The variable `current-cycle-expi
 
 A cycle plays out as follows:
 
-**I. Auction**\
+**I. Auction**
+
 During a 3hr auction that decreases the price in 2% increments every 30min (dutch auction), user 2 gets the ability to buy NFTs representing **call** options on STXUSD. The options have a one week expiry (every Friday @ 4pm GMT) and a strike price 15% above the current STXUSD price. 
 
-**II. Settlement**\
+**II. Settlement**
+
 Once the option has expired the contract calculates the options NFT's value (`options-pnl`). This vaule being either positive (in-the-money) or zero (out-of-the-money) determines the distribution of the contract's funds between the options NFT holders and the vault.
 
 A) Settlement with options NFT holders (user 2)
@@ -97,16 +99,34 @@ B) Settlement with the vault (user 1)
 
 Independently from the value of the options NFT, the balances of the vault's internal `ledger` gets updated after every cycle: The `distribute-pnl` function distributes the cycles' profit or loss (pnl) to the investors in the vault and updates every user's ledger `balance`.
 
-**III. Ledger updates and payement processing**\
+**III. Ledger updates and payement processing**
+
 Intra-week deposits and withdrawals are kept seperate from the vault `balance` and are tracked in the `pending-deposit` and `pending-withdrawal` ledger entries. Once the settlement process is completed, the vault contract processes both deposits and withdrawals and sends the corresponding on-chain transactions. Note that deposits are processed on-chain immediately when requested by the user, while Withdrawals are only broadcast to the network in bulk at the end of every cycle.
 
-### Detailed description of the functions in the `options-nft` contract
+### Description of the `options-nft` contract
+
+### 1) Data variables and maps
+
+**:card_file_box: `options-ledger`**
+
+The options-ledger map holds all the data points necessary to describe a batch of weekly options. It maps the `cycle-expiry` timestamp (UNIX timestamp in milliseconds) against:
+- the `strike` price for the call option (see [glossary](https://github.com/options-vault/options-vault/edit/dev/README.md#glossary))
+- the `first-token-id` indicating the token-id of the first options NFT minted in this batch
+- the `last-token-id` indicating the token-id of the last options NFT minted in this batch
+- the `option-pnl` indicating the STX value of the option after expiry
+
+**:card_file_box: `options-ledger-list`**
+
+The options-ledger-list is appended to at the end of every cycle. It holds a tuple with the `cycle-expiry` of an options NFT batch and the corresponding `last-token-id`. The list is used by the `find-options-ledger-list-entry` function in the `claim` method to iterate over all expired options NFT batches and map a provdied token-id to a batch expiry date.
+
+
+### 2) Functions
 
 ![Cycle Overview With Functions](https://github.com/options-vault/options-vault/blob/dev/assets/cycle-overview-with-functions-2.png)
 
 #### Cycle Start
 
-**:star2: _`init-auction`_**
+**:star2: `init-auction`**
 
 The function sets the `next-cycle-expiry` date, calls `calculate-strike` to determine the next cycles strike price and creates a new entry in the `opions-ledger`. It sets the USD price by calling `set-options-price` and then determines and sets a series of variables for the upcoming auction":
 - the `auction-starttime` is 2 hours after the last cycyles expiry
@@ -116,89 +136,117 @@ The function sets the `next-cycle-expiry` date, calls `calculate-strike` to dete
 
 #### Auction
 
-**:star2: _`mint`_**
+**:star2: `mint`**
 
 The mint function allows users to purchase options NFTs during a 3 hour auction window. The function receives pricing data from a Redstone oracle and verifies that it was signed by a trusted public key. The function interacts with update-options-price-in-usd which decrements the options-price-in-usd by 2% every 30 minutes. The options NFT is priced in USD, but the sale is settled in STX - get-update-latest-price-in-stx handles the conversion.
 
 #### Settlement
 
-**:star2: _`submit-price-data`_**
+**:star2: `submit-price-data`**
 
 The function receives Redstone data packages from the server and verifies if the data has been signed by a trusted Redstone oracle's public key. The function additionally contains a time-based control flow that can trigger `transition-to-next-cycle` if the cycle has expred.
 
-**:star2: _`transition-to-next-cycle`_**
+**:star2: `transition-to-next-cycle`**
 
 The function is only executed once, after current-cycle is expired. It calls series of functions that `determine-value` of the expired cycle, `create-settlementpool` if the option NFT holds value, reflect all changes in the internal ledger system (`update-vault-ledger` and `update-options-ledger`) and initializes the auction for the next cycle.
 
 It finally moves the watches of the inernal clock, and sets `current-cycle-expiry` to one week in the future.
 
-**:star2: _`determine-value`_**
+**:star2: `determine-value`**
 
 The function calculates the value of the expired options NFT and updates the `options-ledger` entry with the corresponding `option-pnl` (profit and loss).
 
-**:star2: _`create-settlement-pool`_**
+**:star2: `create-settlement-pool`**
 
 If the `option-pnl` is positive, the function calls the `create-settlement-pool` method in the vault contract, which allocates all funds needed to pay back options NFT holder for the week to a seperate account. 
 
-**:star2: _`claim`_**
+**:star2: `claim`**
 
 The claim function allows users to send an option NFT to the options-nft contract and claim the STX equivalent of the `option-pnl` at expiry.  The function receives pricing data from a Redstone oracle and verifies that it was signed by a trusted public key. It additionally receives the `token-id` of the option NFT that is to be claimed. Via the `find-options-ledger-entry` method the expiry-date of the NFT is determined.  If the `option-pnl` is above zero the contract sends a STX transfer to the NFT holder.
 
 #### Update ledger and process payments
 
-**:star2: _`update-vault-ledger`_**
+**:star2: `update-vault-ledger`**
 
 The function updates the vault ledger by reflecting the cycle's option-pnl in investor balances and processes the intra-cycle deposits and withdrawals.
 
-**:star2: _`update-options-ledger`_**
+**:star2: `update-options-ledger`**
 
 The function creates an options-ledger entry for the next cycle.
 
 #### Helper functions
 
-**:star2: _`calculate-strike`_**
+**:star2: `calculate-strike`**
 
 Sets the strike price of the options NFT 15% above the current price of the underlying asset. In the next iteration we intend to replace this with a calculation that takes more variables (i.e. volatility) into account.
 
-**:star2: _`set-options-price`_**
+**:star2: `set-options-price`**
 
 The price is determined using a simplified calculation that sets `options-price-in-usd` to 0.5% of the `stxusd-rate`. If all 52 weekly options for a year expiry worthless, an uncompounded 26% APY would be achieved by this pricing strategy. In the next iteration we intend to replace this simplified calculation with the *Black Scholes formula* - the industry standard for pricing European style options.
 
-**:star2: _`update-options-price-in-usd`_**
+**:star2: `update-options-price-in-usd`**
 
 The function decrements the `options-price-in-usd` by 2% every 30 minutes during the 3 hour auction. If the `epexted-decrements` are higher than the `applied-decrements`, the necessary decrements are applied to the options-price-in-usd.
 
-### Detailed description of the functions in the `vault` contract
+### Description of the `vault` contract
+
+### 1) Data variables and maps
+
+**:card_file_box: `ledger`**
+
+The ledger map accounts for the distribution of the vault funds to the investors in the vault. It maps the investor's `principal` address to
+- the investor's `balance`, his total active STX in the vault
+- the investor's `pending-deposit`, intra-week deposits that are added to the `balance` at the end of every cycle
+- the investor's `pending-withdrawal`, intra-week withdrawals that are added to the `balance` at the end of every cycle
+- the investor's `address`
+
+**:card_file_box: `investor-addresses`**
+
+The investor-addresses list holds the `principal` of every investor that holds a `balance` in the vault. It used to iterate over all investor addresses in the `distribute-pnl`, `process-deposits` and `process-withdrawals` functions.
+
+**:card_file_box: `total-balances`**
+
+The total-balances variable holds a uint number representing the sum of all investor balances in the vault `ledger`.
+
+**:card_file_box: `total-pending-deposits`**
+
+The total-pending-deposits variable holds a uint number representing the sum of all 'pending-deposit` entries in the vault `ledger`. 
+
+**:card_file_box: `total-settlement-pool`**
+
+The total-settlement-pool variable holds a uint number representing the number of STX in the settlement pool. The settlement pool is used to pay out all STX claims from in-the-money options NFT holders.
+
+### 2) Functions
 
 [TODO: Add cycle overview mapped against functions in the vault contract]
 
 TODO: Organize below functions according to phases in the picture
 
-**:star2: _`queue-deposit`_**
+**:star2: `queue-deposit`**
 
 The function transfers the deposited STX amount to the vault contract and adds the amount to the `pending-deposits` property of the investor's entry in the vault `ledger`. If it is the first deposit for the investor, the function adds the investor's address (principal) to the`investor-addresses` list.
 
-**:star2: _`process-deposits`_**
+**:star2: `process-deposits`**
 
 The function iterates over the `investor-addresses` list and applies the `pending-deposits` amount to the investor's ledger `balance`.
 
-**:star2: _`queue-withdrawal`_**
+**:star2: `queue-withdrawal`**
 
 The function adds the requested withdrawal amount to the `pending-withdrawal` property of the investor's entry in the vault `ledger`. The function does not send an on-chain transaction but only queues the withdrawal to be processed at the end of the cycle with `process-withdrawal`.
 
-**:star2: _`process-withdrawals`_**
+**:star2: `process-withdrawals`**
 
 The function iterates over the `investor-addresses` list and applies the `pending-withdrawal` amount to the investor's ledger `balance`. If the investor has the necessary balance available the function processes the withdrawal by sending an on-chain STX transfer for the requested amount.
 
-**:star2: _`create-settlement-pool`_**
+**:star2: `create-settlement-pool`**
 
 The function transfers the STX amount owed to the cycle's NFT holders to the `options-nft` contract, effectively creating a settlement-pool. It is called by the `options-nft` contract as part of the logic for `determine-value-and-settle` and only executes in case of an in-the-money options NFT.
 
-**:star2: _`deposit-premium`_**
+**:star2: `deposit-premium`**
 
 The function transfers the STX amount paid by user 2 for minting an options NFT (the premium) to the vault contract.
 
-**:star2: _`distribute-pnl`_**
+**:star2: `distribute-pnl`**
 
 The function distributes the cycle's profit and loss (pnl) to the investors in the `ledger` on a pro-rata basis.
 
@@ -208,7 +256,12 @@ The function distributes the cycle's profit and loss (pnl) to the investors in t
 
 unit testing + end-to-end testing
 
-## Thank yous
+## Glossary
+
+**:clipboard: `strike`**
+The strike price is the STXUSD rate above which the option holder has the right to buy STX from the vault contract. If the underlying price goes above the strike price the option "is in-the-money", if the underlying price is below the strike price, the option is "out-of-the-money"
+
+## Acknowledgements
 
 We want to thank @Marvin Jansen for writing the Redstone connect
 
