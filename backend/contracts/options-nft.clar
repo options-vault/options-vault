@@ -65,7 +65,9 @@
 
 ;; private functions
 
-;; <transition-to-next-cycle>: 
+;; <transition-to-next-cycle>: The function is only executed once, after current-cycle is expired. It calls series of functions
+;;                             that determine-value of the expired cycle, create-settlementpool if the option NFT holds value, 
+;;                             reflect all changes in the internal ledger system and initializes the auction for the next cycle.
 (define-private (transition-to-next-cycle)
 	(let
 		(
@@ -87,7 +89,8 @@
 	)
 )
 
-;; <determine-value>: 
+;; <determine-value>: The function calculates the value of the expired options NFT and updates the options-ledger entry with
+;;                    the corresponding option-pnl (profit and loss).
 (define-private (determine-value) 
 	(let
 		(
@@ -126,7 +129,8 @@
 	)
 )
 
-;; <crete-settlement-pool>: 
+;; <crete-settlement-pool>: If the option-pnl is positive, the function calls the create-settlement-pool method in the vault contract,
+;;                          which allocates all funds needed to pay back options NFT holder for the week to a seperate account. 
 (define-private (create-settlement-pool) 
 	(let
 		(
@@ -137,7 +141,7 @@
 			(stxusd-rate (unwrap! (var-get last-stxusd-rate) ERR_READING_STXUSD_RATE))
 		)
 		(if (> option-pnl u0) 
-			;; Create segregated settlement pool by sending all funds necessary for paying outstanding nft redemptions
+			;; Create segregated settlement pool for all STX owed to options NFT holders
 			(try! (as-contract (contract-call? .vault create-settlement-pool (* option-pnl options-minted-amount)))) 
 			true
 		)
@@ -145,8 +149,8 @@
 	)
 )
 
-;; <update-vault-ledger>: The function is called at the end of a cycle to update the vault ledger 
-;;                        to represents the option-pnl as well as the intra-cycle deposits and withdrawals.
+;; <update-vault-ledger>: The function updates the vault ledger by reflecting the cycle's option-pnl in investor balances 
+;;                        and processes the intra-cycle deposits and withdrawals.
 (define-private (update-vault-ledger) 
 	(begin 
 		(try! (as-contract (contract-call? .vault distribute-pnl)))
@@ -156,7 +160,7 @@
 	)
 )
 
-;; <set-options-ledger>: 
+;; <set-options-ledger>: The function creates an options-ledger entry for the next cycle.
 (define-private (update-options-ledger (next-cycle-expiry uint)) 
 	(let
 		(
@@ -178,7 +182,9 @@
 	)
 )
 
-;; <init-auction>: Initialize an auction with a normal start time 120 min after the last cycle expiry.
+;; <init-auction>: The function sets the next-cycle-expiry date, calls calculate-strike to determine the next cycles strike price
+;;                 and creates a new entry in the opions-ledger. It sets the USD price by calling set-options-price and then 
+;;                 determines and sets a series of variables for the upcoming auction.
 (define-private (init-auction) 
 	(let
 		(
@@ -203,29 +209,26 @@
   (is-eq (get symbol entries-list) symbol-stx) 
 )
 
-;; <add-to-options-ledger-list>: Adds a cycle-tuple to the options-ledger-list. Called by settle.
+;; <add-to-options-ledger-list>: Adds a cycle-tuple to the options-ledger-list. Called by determine-value.
 (define-private (add-to-options-ledger-list (cycle-tuple { cycle-expiry: uint, last-token-id: uint}))
   (var-set options-ledger-list (unwrap-panic (as-max-len? (append (var-get options-ledger-list) cycle-tuple) u1000)))
 )
 
-;; <set-options-price>: The price is determined using a simplified calculation that sets options price at 0.5% of the stxusd price. If all 52 weekly options
-;;                      for a year would expiry worthless, a uncompounded 26% APY would be achieved by this pricing strategy. In the next iteration we intend
+;; <set-options-price>: The price is determined using a simplified calculation that sets the options-price-in-usd to 0.5% of the stxusd-rate. If all 52 weekly options
+;;                      for a year expiry worthless, an uncompounded 26% APY would be achieved by this pricing strategy. In the next iteration we intend
 ;;                      to replace this simplified calculation with the Black Scholes formula - the industry standard for pricing European style options.
 (define-private (set-options-price (stxusd-rate uint)) 
 	(var-set options-price-in-usd (some (/ stxusd-rate u200)))
 )
 
-;; <calculate-strike>: A simple calculation to set the strike price 15% higher than the current price of the underlying asset In the next iteration we intend to
-;;                     replace this simplified calculation with a calculation that takes more variables (i.e. volatility) into account. Since the begin of the auction
-;;                     is somewhat variable (there is a small chance that it starts later than normal-start-time) it would help risk-management to make the calculate-strike
-;;                     and/or the set-optons-price functions dependent on the time-to-expiry, which would allow to more accurately price the option's time value.
+;; <calculate-strike>: Sets the strike price of the options NFT 15% above the current price of the underlying asset. 
+;;                     In the next iteration we intend to replace this with a calculation that takes more variables (i.e. volatility) into account.
 (define-private (calculate-strike (stxusd-rate uint))
 	(/ (* stxusd-rate u115) u100)
 )
 
-;; <update-options-price-in-usd>: The function decrements the options-price-in-usd by 2% every 30 minutes. 
-;;                                The expected-decrements are calculated and compared to the applied-decrements. 
-;;                                If they are higher, the necessary decrement is applied to the options-price-in-usd.
+;; <update-options-price-in-usd>: The function decrements the options-price-in-usd by 2% every 30 minutes during the 3 hour auction. 
+;;                                If the epexted-decrements are higher than the applied-decrements, the necessary decrements are applied to the options-price-in-usd.
 (define-private (update-options-price-in-usd (timestamp uint)) 
 	(let
 		(
@@ -276,9 +279,8 @@
 
 ;; public functions
 
-;; <submit-price-data>: The function receives Redstone data packages from the server and verifies if the data has been signed by
-;;                      a trusted Redstone oracle's public key. The function additionally calls the cycle-expiry-check function
-;;                      which can trigger method to transition state to the next cycle.
+;; <submit-price-data>: The function receives Redstone data packages from the server and verifies if the data has been signed by a trusted Redstone oracle's public key.
+;;                      The function additionally contains a time-based control flow that can trigger `transition-to-next-cycle` if the cycle has expred.
 (define-public (submit-price-data (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65)))
 	(let 
 		(
@@ -346,7 +348,10 @@
 	)
 )
 
-;; <claim>: 
+;; <claim>: The claim function allows users to send an option NFT to the options-nft contract and claim the STX equivalent of the option-pnl at expiry. 
+;;          The function receives pricing data from a Redstone oracle and verifies that it was signed by a trusted public key. It additionally receives 
+;;          the token-id of the option NFT that is to be claimed. Via the find-options-ledger-entry method the expiry-date of the NFT is determined. 
+;;          If the option-pnl is posiive the contract sends a STX transfer to the NFT holder.
 ;; #[allow(unchecked_data)] 
 (define-public (claim (token-id uint) (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65)))
   (let

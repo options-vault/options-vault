@@ -19,7 +19,15 @@
 ;; data maps and vars
 
 ;; Ledger map to store balances and withdraw/deposit requests for each principal (investor type / vault)
-(define-map ledger principal { address: principal, balance: uint, pending-deposits: uint, pending-withdrawal: uint })
+(define-map ledger 
+  principal 
+  { 
+    balance: uint, 
+    pending-deposits: uint, 
+    pending-withdrawal: uint,
+    address: principal  
+  }
+)
 
 (define-data-var investor-addresses (list 1000 principal) (list))
 (define-data-var total-balances uint u0)
