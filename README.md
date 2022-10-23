@@ -327,7 +327,7 @@ The pnl or "profit and loss" refers to the value of the options NFT contract at 
 
 We would like to thank [Marvin Janssen](https://github.com/MarvinJanssen) for writing the [Redstone-Clarity-connector](https://github.com/MarvinJanssen/redstone-clarity-connector) contracts which we have integrated into our codebase.
 
-We would like to thank [Ciara](https://github.com/proiacm) and [Aakanasha](https://github.com/amahajan87) for teaching us the foundational Clarity skills during [Clarity Camp](https://clarity-lang.org/universe#camps) cohort 4.
+We would like to thank [Ciara](https://github.com/proiacm) and [Aakanasha](https://github.com/amahajan87) for teaching us foundational Clarity skills during [Clarity Camp](https://clarity-lang.org/universe#camps) cohort 4.
 
 ## License
 
