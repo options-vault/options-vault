@@ -318,7 +318,7 @@ The function iterates over the `investor-addresses` list and applies the `pendin
 
 ## Testing
 
-![Code Coverage Report](https://github.com/options-vault/options-vault/blob/dev/assets/code-coverage-report.png)
+![Code Coverage Report](https://github.com/options-vault/options-vault/blob/dev/assets/code-coverage-report-2.png)
 
 The repo contains a comprehensive testing suite for both the `options-nft` and `vault` contract. As the above coverage report shows, we have tests for 100% of the functions in our contracts as well as 95%+ of lines of code.
 
