@@ -1,4 +1,4 @@
-# :moneybag: Options Vaults :moneybag:
+# :moneybag: Options Vault :moneybag:
 ### A Stacks DeFi app that automates covered call writing to generate sustainable, risk-adjusted yield.
 
 Options vaults allow you to allocate your crypto to an automated options yield strategy. All STX deposited into the options vault become available to a set of Clarity smart contracts that execute a simple [covered call](https://www.investopedia.com/terms/c/coveredcall.asp) options writing strategy.
