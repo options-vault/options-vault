@@ -12,7 +12,7 @@ The net result is a strategy that, in bearish and mildly bullish market conditio
 This protocol's longer-term goal is to provide structured investment products including but not limited to the covered call strategy to the Stacks and Bitcoin community.
 
 ## Table of Contents  
-1. [Why Options Arbitrage?](#optionsArbitrage)  
+1. [Why Covered Call Writing?](#optionsArbitrage)  
 2. [Why Automation Via Smart Contracts?](#wavsc)  
 3. [How does it work? - TL;DR](#hdiw)  
     - [Two User Types Contracts?](#tut)
@@ -34,11 +34,11 @@ This protocol's longer-term goal is to provide structured investment products in
     
 <a name="optionsArbitrage"/>
 
-## Why Options Arbitrage?
+## Why Covered Call Writing?
 
-Options arbitrage strategies are a time-tested way to generate yield. These strategies can generate steady income streams in specific market conditions **without liquidation risk**.
+Covered call writing, the strategy of holding an underlying asset like STX and selling the same amount of call options "against" it, is a time-tested portfolio tool for generating yield. Most options contracts, especially contracts with far out-of-the-money strike prices (this vault sells one week contracts 15% above spot), expire worthless. And so the result is a strategy, which during down and side ways markets puts a steady stream of income payments into the investor's pocket. Only is strong up markets, bull markets, markets that increase more than 15% in a week, does this strategy become unprofitable. These strategies generate steady income streams in specific market conditions **without liquidation risk**.
 
-Most importantly they don't rely on the emission of inflationary protocol tokens as widely observed in [Automated Market Making](https://www.gemini.com/cryptopedia/amm-what-are-automated-market-makers) protocols, which gives the user the ability to generate sustainable, risk-adjusted income across market conditions.
+Coverd call writing strategies do not rely on the emission of inflationary protocol tokens, a strategy widely observed in the bootstrapping phase of [Automated Market Making](https://www.gemini.com/cryptopedia/amm-what-are-automated-market-makers) protocols. This means that the yield generated from these strategies is sustainable, it allows investor's to earn risk-adjusted income across all market conditions.
 
 <a name="wavsc"/>
 
