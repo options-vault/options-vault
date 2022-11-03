@@ -1809,8 +1809,6 @@ Clarinet.test({
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
 		block.receipts[0].result.expectOk().expectBool(true);
 
-		const { timestamp, price, signature } = convertRedstoneToContractData(redstoneDataOneMinApart[6])
-
 		// Call claim for accountA and token-id u1
 		block = chain.mineBlock([
 			Tx.contractCall(
@@ -1818,9 +1816,6 @@ Clarinet.test({
 				"claim",
 				[
 					types.uint(1), 
-					timestamp,
-					price,
-					signature
 				],
 				accountA.address
 			)
@@ -1870,8 +1865,6 @@ Clarinet.test({
 		block = submitPriceDataAndTest(chain, accountA.address, redstoneDataOneMinApart[5])
 		block.receipts[0].result.expectOk().expectBool(true);
 
-		const { timestamp, price, signature } = convertRedstoneToContractData(redstoneDataOneMinApart[6])
-
 		// Call claim for accountA and token-id u1
 		block = chain.mineBlock([
 			Tx.contractCall(
@@ -1879,9 +1872,6 @@ Clarinet.test({
 				"claim",
 				[
 					types.uint(1), 
-					timestamp,
-					price,
-					signature
 				],
 				accountA.address
 			)
@@ -1947,8 +1937,6 @@ Clarinet.test({
 			redstoneDataOneMinApart
 		)
 		assertEquals(block.receipts.length, 2);
-
-		const { timestamp, price, signature } = convertRedstoneToContractData(redstoneDataOneMinApart[2])
 		
 		// Call claim for accountA and token-id u1
 		block = chain.mineBlock([
@@ -1957,9 +1945,6 @@ Clarinet.test({
 				"claim",
 				[
 					types.uint(1), 
-					timestamp,
-					price,
-					signature
 				],
 				accountA.address
 			)
