@@ -12,7 +12,7 @@ The net result is a strategy that, in bearish and mildly bullish market conditio
 This protocol's longer-term goal is to provide structured investment products including but not limited to the covered call strategy to the Stacks and Bitcoin community.
 
 ## Table of Contents  
-1. [Why Options Arbitrage?](#optionsArbitrage)  
+1. [Why Options Writing?](#optionsWriting)  
 2. [Why Automation Via Smart Contracts?](#wavsc)  
 3. [How does it work? - TL;DR](#hdiw)  
     - [Two User Types Contracts?](#tut)
@@ -32,11 +32,11 @@ This protocol's longer-term goal is to provide structured investment products in
 9. [Special Thanks](#specialt)
 9. [License](#license)
     
-<a name="optionsArbitrage"/>
+<a name="optionsWriting"/>
 
-## Why Options Arbitrage?
+## Why Options Writing?
 
-Options arbitrage strategies are a time-tested way to generate yield. These strategies can generate steady income streams in specific market conditions **without liquidation risk**.
+Options wirting strategies are a time-tested way to generate yield. These strategies can generate steady income streams in specific market conditions **without liquidation risk**.
 
 Most importantly they don't rely on the emission of inflationary protocol tokens as widely observed in [Automated Market Making](https://www.gemini.com/cryptopedia/amm-what-are-automated-market-makers) protocols, which gives the user the ability to generate sustainable, risk-adjusted income across market conditions.
 
@@ -46,7 +46,7 @@ Most importantly they don't rely on the emission of inflationary protocol tokens
 
 A certain level of financial acumen is required to execute these strategies successfully and therefore, in the traditional financial system, they have mainly been employed by financial institutions and sophisticated high net worth individuals.
 
-We believe that by automating the execution using Clarity smart contracts, we can make these strategies available to a much wider audience. In our view, this is a crucial step towards a truly open and democratized financial system -- a financial system that makes sophisticated arbitrage strategies accessible to anybody with a Stacks account and without the need to give up custody over assets.
+We believe that by automating the execution using Clarity smart contracts, we can make these strategies available to a much wider audience. In our view, this is a crucial step towards a truly open and democratized financial system -- a financial system that makes sophisticated options wiriting strategies accessible to anybody with a Stacks account and without the need to give up custody over assets.
 
 Stacks is in a unique position to become the smart contracting layer for Bitcoin, and by extension the home of Bitcoin DeFi. In making sustainable yield strategies available on Stacks we believe that we can help unlock the ecosystem's potential and contribute to accelerated user adoption.
 
