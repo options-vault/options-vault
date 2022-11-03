@@ -353,17 +353,14 @@
 ;;          the token-id of the option NFT that is to be claimed. Via the find-options-ledger-entry method the expiry-date of the NFT is determined. 
 ;;          If the option-pnl is posiive the contract sends a STX transfer to the NFT holder.
 ;; #[allow(unchecked_data)] 
-(define-public (claim (token-id uint) (timestamp uint) (entries (list 10 {symbol: (buff 32), value: uint})) (signature (buff 65)))
+(define-public (claim (token-id uint))
   (let
     (
       (recipient tx-sender)
-			(signer (try! (contract-call? .redstone-verify recover-signer timestamp entries signature)))
 			(token-expiry (get timestamp (unwrap-panic (find-options-ledger-entry token-id)))) 
 			(settlement-options-ledger-entry (unwrap! (get-options-ledger-entry token-expiry) ERR_OPTION_NOT_EXPIRED))
 			(option-pnl (unwrap-panic (get option-pnl settlement-options-ledger-entry)))
     )
-		;; Check if the signer is a trusted oracle
-    (asserts! (is-trusted-oracle signer) ERR_UNTRUSTED_ORACLE)
 		(if (> option-pnl u0) 
 			(begin
 				;; Transfer options NFT to settlement contract
