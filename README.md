@@ -178,7 +178,7 @@ The options-for-sale variable represents the amount of options NFTs the `mint` f
 
 #### Cycle Start
 
-**:star2: `init-auction`**
+**:star2: `(init-auction)`**
 
 The function sets the `next-cycle-expiry` date, calls `calculate-strike` to determine the next cycles strike price and creates a new entry in the `opions-ledger`. It sets the USD price by calling `set-options-price` and then determines and sets a series of variables for the upcoming auction":
 - the `auction-start-time` is 2 hours after the last cycles expiry
@@ -189,54 +189,109 @@ The function sets the `next-cycle-expiry` date, calls `calculate-strike` to dete
 #### Auction
 
 **:star2: `mint`**
+```
+(define-public
+    (mint
+        (timestamp uint) 
+        (entries (list 10 {symbol: (buff 32), value: uint})) 
+        (signature (buff 65)))
+``` 
 
 The mint function allows users to purchase options NFTs during a 3 hour auction window. The function receives pricing data from a Redstone oracle and verifies that it was signed by a trusted public key. The function interacts with update-options-price-in-usd which decrements the options-price-in-usd by 2% every 30 minutes. The options NFT is priced in USD, but the sale is settled in STX - get-update-latest-price-in-stx handles the conversion.
 
 #### Settlement
 
 **:star2: `submit-price-data`**
+```
+(define-public
+    (mint
+        (timestamp uint) 
+        (entries (list 10 {symbol: (buff 32), value: uint})) 
+        (signature (buff 65)))
+``` 
 
 The function receives Redstone data packages from the server and verifies if the data has been signed by a trusted Redstone oracle's public key. The function additionally contains a time-based control flow that can trigger `transition-to-next-cycle` if the cycle has expired.
 
 **:star2: `transition-to-next-cycle`**
+```
+(define-private 
+    (transition-to-next-cycle))
+```
 
 The function is only executed once, after current-cycle is expired. It calls a series of functions that determines the value of the expired cycle, creates a settlement pool if the option NFT holds value, reflects all changes in the internal ledger system (`update-vault-ledger` and `update-options-ledger`) and initializes the auction for the next cycle.
 
 It finally moves the watches of the internal clock, and sets `current-cycle-expiry` to one week in the future.
 
 **:star2: `determine-value`**
+```
+(define-private 
+    (determine-value))
+```
 
 The function calculates the value of the expired options NFT and updates the `options-ledger` entry with the corresponding `option-pnl` (profit and loss).
 
 **:star2: `create-settlement-pool`**
+```
+(define-private 
+    (create-settlment-pool))
+```
 
 If the `option-pnl` is positive, the function calls the `create-settlement-pool` method in the vault contract, which allocates all funds needed to pay back options NFT holder for the week to a separate account. 
 
 **:star2: `claim`**
+```
+(define-public
+    (claim
+        (token-id uint))) 
+``` 
 
 The claim function allows users to send an option NFT to the options-nft contract and claim the STX equivalent of the `option-pnl` at expiry. The function receives pricing data from a Redstone oracle and verifies that it was signed by a trusted public key. It additionally receives the `token-id` of the option NFT that is to be claimed. The expiry-date of the NFT is determined via the `find-options-ledger-entry` method. If the `option-pnl` is above zero the contract sends a STX transfer to the NFT holder.
 
 #### Ledger updates and payment processing
 
 **:star2: `update-vault-ledger`**
+```
+(define-private 
+    (update-vault-ledger)) 
+```
 
 The function updates the vault ledger by reflecting the cycle's option-pnl in investor balances and processes the intra-cycle deposits and withdrawals.
 
 **:star2: `update-options-ledger`**
+```
+(define-private 
+    (update-options-ledger 
+        (next-cycle-expiry uint))) 
+```
 
 The function creates an options-ledger entry for the next cycle.
 
 #### Helper functions
 
 **:star2: `calculate-strike`**
+```
+(define-private 
+    (calculate-strike 
+        (stxusd-rate uint)))
+```
 
 Sets the strike price of the options NFT 15% above the current price of the underlying asset. In the next iteration we intend to replace this with a calculation that takes more variables (i.e. volatility) into account.
 
 **:star2: `set-options-price`**
+```
+(define-private 
+    (set-options-price 
+        (stxusd-rate uint))) 
+```
 
 The price is determined using a simplified calculation that sets `options-price-in-usd` to 0.5% of the `stxusd-rate`. If all 52 weekly options for a year expiry worthless, an uncompounded 26% APY would be achieved by this pricing strategy. In the next iteration we intend to replace this simplified calculation with the *Black-Scholes formula* - the industry standard for pricing European style options.
 
 **:star2: `update-options-price-in-usd`**
+```
+(define-private 
+    (update-options-price-in-usd 
+        (timestamp uint))) 
+```
 
 The function decrements the `options-price-in-usd` by 2% every 30 minutes during the 3 hour auction. If the `expected-decrements` are higher than the `applied-decrements`, the necessary decrements are applied to the options-price-in-usd.
 
@@ -281,36 +336,69 @@ The total-settlement-pool variable holds a uint number representing the number o
 #### Auction
 
 **:star2: `deposit-premium`**
+```
+(define-public 
+    (deposit-premium 
+        (amount uint) 
+        (original-sender principal))) 
+```
 
 The function transfers the STX amount paid by user 2 for minting an options NFT (the premium) to the vault contract.
 
 #### Intra-cycle
 
 **:star2: `queue-deposit`**
+```
+(define-public 
+    (queue-deposit 
+        (amount uint))) 
+```
 
 The function transfers the deposited STX amount to the vault contract and adds the amount to the `pending-deposits` property of the investor's entry in the vault `ledger`. If it is the first deposit for the investor, the function adds the investor's address (principal) to the`investor-addresses` list.
 
 **:star2: `queue-withdrawal`**
+```
+(define-public 
+    (queue-withdrawal 
+        (amount uint))) 
+```
 
 The function adds the requested withdrawal amount to the `pending-withdrawal` property of the investor's entry in the vault `ledger`. The function does not send an on-chain transaction but only queues the withdrawal to be processed at the end of the cycle with `process-withdrawal`.
 
 #### Settlement
 
 **:star2: `create-settlement-pool`**
+```
+(define-public 
+    (create-settlement-pool 
+        (amount uint)))
+```
 
 The function transfers the STX amount owed to the cycle's NFT holders to the `options-nft` contract, effectively creating a settlement-pool. It is called by the `options-nft` contract as part of the logic for `determine-value-and-settle` and only executes in case of an in-the-money options NFT.
 
 #### Ledger updates and payment processing
 
 **:star2: `distribute-pnl`**
+```
+(define-public 
+    (distribute-pnl))
+```
 
 The function distributes the cycle's profit and loss (pnl) to the investors in the `ledger` on a pro-rata basis.
 
 **:star2: `process-deposits`**
+```
+(define-public 
+    (process-deposits))
+```
 
 The function iterates over the `investor-addresses` list and applies the `pending-deposits` amount to the investor's ledger `balance`.
 
 **:star2: `process-withdrawals`**
+```
+(define-public 
+    (process-withdrawals))
+```
 
 The function iterates over the `investor-addresses` list and applies the `pending-withdrawal` amount to the investor's ledger `balance`. If the investor has the necessary balance available, the function processes the withdrawal by sending an on-chain STX transfer for the requested amount.
 
