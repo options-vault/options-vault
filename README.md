@@ -12,7 +12,7 @@ The net result is a strategy that, in bearish and mildly bullish market conditio
 This protocol's longer-term goal is to provide structured investment products including but not limited to the covered call strategy to the Stacks and Bitcoin community.
 
 ## Table of Contents  
-1. [Why Options Arbitrage?](#optionsArbitrage)  
+1. [Why Options Writing?](#optionsWriting)  
 2. [Why Automation Via Smart Contracts?](#wavsc)  
 3. [How does it work? - TL;DR](#hdiw)  
     - [Two User Types Contracts?](#tut)
@@ -32,11 +32,11 @@ This protocol's longer-term goal is to provide structured investment products in
 9. [Special Thanks](#specialt)
 9. [License](#license)
     
-<a name="optionsArbitrage"/>
+<a name="optionsWriting"/>
 
-## Why Options Arbitrage?
+## Why Options Writing?
 
-Options arbitrage strategies are a time-tested way to generate yield. These strategies can generate steady income streams in specific market conditions **without liquidation risk**.
+Options writing strategies are a time-tested way to generate yield. These strategies can generate steady income streams in specific market conditions **without liquidation risk**.
 
 Most importantly they don't rely on the emission of inflationary protocol tokens as widely observed in [Automated Market Making](https://www.gemini.com/cryptopedia/amm-what-are-automated-market-makers) protocols, which gives the user the ability to generate sustainable, risk-adjusted income across market conditions.
 
