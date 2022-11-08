@@ -1,0 +1,9 @@
+
+backend/settings/Mainnet.toml
+backend/settings/Testnet.toml
+.requirements/
+backend/history.txt
+.cache
+tests/deprecated.ts
+deployments
+node_modules
