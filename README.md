@@ -178,7 +178,7 @@ The options-for-sale variable represents the amount of options NFTs the `mint` f
 
 #### Cycle Start
 
-**:star2: `(init-auction)`**
+**:star2: `init-auction`**
 
 The function sets the `next-cycle-expiry` date, calls `calculate-strike` to determine the next cycles strike price and creates a new entry in the `opions-ledger`. It sets the USD price by calling `set-options-price` and then determines and sets a series of variables for the upcoming auction":
 - the `auction-start-time` is 2 hours after the last cycles expiry
